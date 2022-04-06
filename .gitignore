@@ -1,4 +1,5 @@
 models
+fedex_models
 runs
 __pycache__
 *.csv

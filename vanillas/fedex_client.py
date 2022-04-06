@@ -11,9 +11,10 @@ from fedex_model import Net
 from rtpt import RTPT
 import numpy as np
 from tensorboardX import SummaryWriter
+from datetime import datetime as dt
 
 warnings.filterwarnings("ignore", category=UserWarning)
-DEVICE = torch.device("cuda:8" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
 EPOCHS = 1
 
 def train(net, trainloader, lr, writer, epoch):
@@ -66,7 +67,7 @@ def main():
     # Load data
     fashion_mnist_iterator = FashionMNISTLoader.instance(2)
     train_data, test_data = next(fashion_mnist_iterator.get_client_data())
-    train_data, test_data = DataLoader(train_data, 64, True), DataLoader(test_data, 64, False)
+    train_data, test_data = DataLoader(train_data, 64, False), DataLoader(test_data, 64, False)
     rtpt = RTPT('JS', 'HANF_Client', EPOCHS)
     rtpt.start()
 
@@ -75,11 +76,9 @@ def main():
 
         def __init__(self, *args, **kwargs) -> None:
             super().__init__(*args, **kwargs)
-            self.hyperparams = []
-            self.distribution = []
-            self.client_id = "Client_{}".format(str(np.random.randint(0, 1000)))
-            os.mkdir('./fedex_models/' + self.client_id)
-            self.writer = SummaryWriter("./runs/" + self.client_id)
+            self.date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
+            os.mkdir('./fedex_models/Client_{}'.format(self.date))
+            self.writer = SummaryWriter("./runs/Client_{}".format(self.date))
             self.epoch = 1
 
         def get_parameters(self):
@@ -87,8 +86,8 @@ def main():
 
         def set_parameters_train(self, parameters, config):
             # obtain hyperparams and distribution
-            self.hyperparams = parameters[-1]
-            self.distribution = parameters[-2]
+            self.hyperparam_config = float(parameters[-2][0])
+            self.hidx = int(parameters[-1][0])
             
             # remove hyperparameter distribution from parameter list
             parameters = parameters[:-2]
@@ -104,30 +103,22 @@ def main():
 
         def fit(self, parameters, config):
             self.set_parameters_train(parameters, config)
-            lr, hidx = self._sample_hyperparams()
             before_loss, _ = _test(net, test_data)
-            train(net, train_data, lr, self.writer, self.epoch)
+            train(net, train_data, self.hyperparam_config, self.writer, self.epoch)
             after_loss, _ = _test(net, test_data)
             model_params = self.get_parameters()
             rtpt.step()
-            torch.save(net, "./fedex_models/" + self.client_id + '/net_round_{}'.format(self.epoch))
+            torch.save(net, "./fedex_models/Client_{}/net_round_{}".format(self.date, self.epoch))
             self.epoch += 1
-            return model_params, len(train_data), {'lr': lr, 'hidx': hidx, 'before': before_loss, 'after': after_loss}
+            return model_params, len(train_data), {'lr': self.hyperparam_config, 'hidx': self.hidx, 'before': before_loss, 'after': after_loss}
 
         def evaluate(self, parameters, config):
             self.set_parameters_evaluate(parameters)
             loss, accuracy = _test(net, test_data)
             return float(loss), len(test_data), {"accuracy": float(accuracy)}
 
-        def _sample_hyperparams(self):
-            # obtain new learning rate for this batch
-            distribution = torch.distributions.Categorical(torch.FloatTensor(self.distribution))
-            hyp_idx = distribution.sample().item()
-            hyp_config = self.hyperparams[hyp_idx]
-            return hyp_config, hyp_idx
-
     # Start client
-    fl.client.start_numpy_client("[::]:8080", client=MyClient())
+    fl.client.start_numpy_client("[::]:8081", client=MyClient())
 
 
 if __name__ == "__main__":

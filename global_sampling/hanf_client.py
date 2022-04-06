@@ -10,7 +10,7 @@ from trainer import DartsTrainer
 from rtpt import RTPT
 
 warnings.filterwarnings("ignore", category=UserWarning)
-DEVICE = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:5" if torch.cuda.is_available() else "cpu")
 EPOCHS = 1
 
 

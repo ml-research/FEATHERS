@@ -71,7 +71,7 @@ class DartsTrainer:
             logits, loss = self._logits_and_loss(trn_X, trn_y)
             self.writer.add_histogram('train_logits', logits, epoch)
             loss.backward()
-            nn.utils.clip_grad_norm_(self.model.parameters(), 7.)  # gradient clipping
+            nn.utils.clip_grad_norm_(self.model.parameters(), 15.)  # gradient clipping
             # log gradients of last 5 layers
             for name, param in list(reversed(list(self.model.named_parameters())))[:10]:
                 self.writer.add_histogram(name + '.grad', param.grad, epoch*step)

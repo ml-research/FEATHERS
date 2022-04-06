@@ -265,7 +265,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         log_model_weights(self.net, self.current_round, self.writer)
 
         # persist model
-        torch.save(self.net, './models/net_round_{}'.format(self.current_round))
+        torch.save(self.net, './fedex_models/net_round_{}'.format(self.current_round))
         self.current_round += 1
 
         # log graph in the end
