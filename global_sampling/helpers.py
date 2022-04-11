@@ -13,9 +13,9 @@ def log_hyper_configs(configs, step, writer):
     for client_id, hyper_config in enumerate(configs):
         writer.add_scalar('client_{}_learning_rate'.format(client_id), hyper_config['lr'], step)
 
-def log_hyper_params(hyper_param_dict):
+def log_hyper_params(hyper_param_dict, file_name):
     to_be_persisted = {k: list(v) for k, v in hyper_param_dict.items()}
-    with open('hyperparameters.json', 'w') as f:
+    with open(file_name, 'w') as f:
         json.dump(to_be_persisted, f)
 
 def compute_accuracy(logits, y):

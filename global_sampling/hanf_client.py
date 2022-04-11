@@ -10,7 +10,7 @@ from trainer import DartsTrainer
 from rtpt import RTPT
 
 warnings.filterwarnings("ignore", category=UserWarning)
-DEVICE = torch.device("cuda:5" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
 EPOCHS = 1
 
 
@@ -94,7 +94,7 @@ def main():
             return float(loss), len(test_data), {"accuracy": float(accuracy)}
 
     # Start client
-    fl.client.start_numpy_client("[::]:8080", client=MyClient())
+    fl.client.start_numpy_client("[::]:8083", client=MyClient())
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ import torch
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 from rtpt import RTPT
+from datetime import datetime as dt
 
 DEVICE = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
@@ -44,8 +45,8 @@ def model_improved(results, weights):
 class HANFStrategy(fl.server.strategy.FedAvg):
 
     def __init__(self, fraction_fit, fraction_eval, initial_net, 
-                log_dir='./runs/', epsilon=0.8, beta=1, nabla=0.1, 
-                discount_factor=0.9, use_gain_avg=False, **args) -> None:
+                log_dir='./runs/', epsilon=0.8, beta=1, eta=0.1, 
+                discount_factor=0.9, use_gain_avg=False, reinitialization=False, **args) -> None:
         """
         Intitialize the HANF strategy used by flwr to aggregation of model parameters.
 
@@ -61,11 +62,13 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         """
         super().__init__(fraction_fit=fraction_fit, fraction_eval=fraction_eval, **args)
         self.hyperparams = np.sort(10 ** (np.random.uniform(-4, 0, 40))) # sorting is important for distribution update
-        log_hyper_params({'learning_rates': self.hyperparams})
+        self.date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
+        log_hyper_params({'learning_rates': self.hyperparams}, 'hyperparameters_{}.json'.format(self.date))
         self.distribution, self.fixed_uniform = np.ones(len(self.hyperparams)) / len(self.hyperparams), np.ones(len(self.hyperparams)) / len(self.hyperparams)
+        self.reinitialize_model = reinitialization
         self.epsilon = epsilon
         self.beta = beta
-        self.nabla = nabla
+        self.eta = eta
         self.discount_factor = discount_factor,
         self.use_gain_avg = use_gain_avg
         self.net = initial_net
@@ -103,19 +106,21 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         # obtain client weights
         samples = np.array([fit_res[1].num_examples for fit_res in results])
         weights = samples / np.sum(samples)
-        #if model_improved(results, weights):
-        #    aggregated_weights, _ = super().aggregate_fit(rnd, results, failures)
-        #    self.last_weights = aggregated_weights
-        #else:
-        #    print("Model did not improve: Use last parameters") # NOTE: HANF!
-        #    aggregated_weights = self.last_weights
-        aggregated_weights, _ = super().aggregate_fit(rnd, results, failures)
+        if self.reinitialize_model:
+            if model_improved(results, weights):
+                aggregated_weights, _ = super().aggregate_fit(rnd, results, failures)
+                self.last_weights = aggregated_weights
+            else:
+                print("Model did not improve: Use last parameters")
+                aggregated_weights = self.last_weights
+        else:
+            aggregated_weights, _ = super().aggregate_fit(rnd, results, failures)
 
         # log current distribution
         self.distribution_history.append(self.distribution)
         dh = np.array(self.distribution_history)
         df = pd.DataFrame(dh)
-        df.to_csv('distribution_history.csv')
+        df.to_csv('distribution_history_{}.csv'.format(self.date))
 
         # update distribution NOTE: Activate again for full HANF!
         gains = self.compute_gains(weights, results)
@@ -206,7 +211,6 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         after_losses = [res.metrics['after'] for _, res in results]
         before_losses = [res.metrics['before'] for _, res in results]
         hidxs = [res.metrics['hidx'] for _, res in results]
-        # compute (avg_before - avg_after)
         avg_gains = np.array([w * (a - b) for w, a, b in zip(weights, after_losses, before_losses)]).sum()
         self.gain_history.append(avg_gains)
         gains = []
@@ -235,12 +239,12 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             weights (_type_): Weights of clients
         """
         gains = gains / self.distribution * np.sum(weights)
-        # bring gains into range [-100, 100] to avoid overflows in exp()
-        gains[gains > 100] = 100
-        gains[gains < -100] = -100
-        self.distribution = self.distribution * np.exp(-(self.nabla * gains))
+        #bound_gains = expit(20, 0.3, gains, 0.2)
+        gains[gains > 500] = 500
+        gains[gains < -500] = -500
+        self.distribution = self.distribution * np.exp(-self.eta*gains)
         self.distribution = self.distribution / self.distribution.sum()
-        # bound distribution's max-probability
+        # bound distribution's mode
         diffs = self.distribution - self.epsilon
         js = np.argwhere(diffs > 0)
         for j in js:
