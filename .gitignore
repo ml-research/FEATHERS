@@ -4,3 +4,4 @@ runs
 __pycache__
 *.csv
 *.json
+hyperparam-logs

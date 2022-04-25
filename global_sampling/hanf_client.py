@@ -4,13 +4,14 @@ import warnings
 import flwr as fl
 import torch
 import torch.nn as nn
-from utils import FashionMNISTLoader
+from utils import get_dataset_loder
 from model import Classifier
 from trainer import DartsTrainer
 from rtpt import RTPT
+import config
 
 warnings.filterwarnings("ignore", category=UserWarning)
-DEVICE = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:7" if torch.cuda.is_available() else "cpu")
 EPOCHS = 1
 
 
@@ -37,16 +38,16 @@ def _test(net, testloader):
 # 2. Federation of the pipeline with Flower
 # #############################################################################
 
-def main():
+def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_channels=16, node_nr=7):
     """Create model, load data, define Flower client, start Flower client."""
 
     # Load model
     criterion = nn.CrossEntropyLoss()
-    net = Classifier(10, criterion, 4, 1, 16, 7)
+    net = Classifier(classes, criterion, cell_nr, input_channels, out_channels, node_nr)
     net.to(DEVICE)
 
     # Load data
-    fashion_mnist_iterator = FashionMNISTLoader.instance(2)
+    fashion_mnist_iterator = get_dataset_loder(dataset, num_clients)
     train_data, test_data = next(fashion_mnist_iterator.get_client_data())
     darts_trainer = DartsTrainer(net, criterion, train_data, test_data, second_order_optim=True, 
                                 device=DEVICE, batch_size=64)
@@ -54,7 +55,7 @@ def main():
     rtpt.start()
 
     # Flower client
-    class MyClient(fl.client.NumPyClient):
+    class HANFClient(fl.client.NumPyClient):
 
         def __init__(self, *args, **kwargs) -> None:
             super().__init__(*args, **kwargs)
@@ -94,8 +95,8 @@ def main():
             return float(loss), len(test_data), {"accuracy": float(accuracy)}
 
     # Start client
-    fl.client.start_numpy_client("[::]:8083", client=MyClient())
+    fl.client.start_numpy_client("[::]:8085", client=HANFClient())
 
 
 if __name__ == "__main__":
-    main()
+    main(config.DATASET, config.CLIENT_NR)

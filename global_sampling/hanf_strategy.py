@@ -12,7 +12,7 @@ from tensorboardX import SummaryWriter
 from rtpt import RTPT
 from datetime import datetime as dt
 
-DEVICE = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:8" if torch.cuda.is_available() else "cpu")
 
 def _test(net, testloader, writer, round):
     """Validate the network on the entire test set."""
@@ -41,12 +41,31 @@ def model_improved(results, weights):
     avg_after = np.sum(weights * after_losses)
     return (avg_after - avg_before) < 0
 
+def logfun(x, g, a):
+    return (g*2 / (1 + np.exp(-a*x)) ) - g
+
+def stuck_penalty(gamma, gains, max_penalty, growth_rate):
+    penalities = []
+    for hypgain in gains.T:
+        penalty = 0
+        flipped_hyp_gains = np.flip(hypgain)
+        for i, gain in enumerate(flipped_hyp_gains):
+            if gain == 0:
+                penalty += 0
+            else:
+                penalty += gamma ** i * abs(gain)**-1
+        penalities.append(penalty)
+    penalities = np.array(penalities)
+    bounded_penalties = logfun(penalities, max_penalty, growth_rate)
+    return bounded_penalties
+
 
 class HANFStrategy(fl.server.strategy.FedAvg):
 
     def __init__(self, fraction_fit, fraction_eval, initial_net, 
-                log_dir='./runs/', epsilon=0.8, beta=1, eta=0.1, 
-                discount_factor=0.9, use_gain_avg=False, reinitialization=False, **args) -> None:
+                log_dir='./runs/', epsilon=0.8, beta=1, eta=0.1, distribution_adjustment='uniform',
+                discount_factor=0.9, use_gain_avg=False, reinitialization=False,
+                gain_history_len=5, gamma=0.9, max_penalty=20, penalty_growth_rate=0.01, use_penalty=True, **args) -> None:
         """
         Intitialize the HANF strategy used by flwr to aggregation of model parameters.
 
@@ -63,7 +82,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         super().__init__(fraction_fit=fraction_fit, fraction_eval=fraction_eval, **args)
         self.hyperparams = np.sort(10 ** (np.random.uniform(-4, 0, 40))) # sorting is important for distribution update
         self.date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
-        log_hyper_params({'learning_rates': self.hyperparams}, 'hyperparameters_{}.json'.format(self.date))
+        log_hyper_params({'learning_rates': self.hyperparams}, 'hyperparam-logs/hyperparameters_{}.json'.format(self.date))
         self.distribution, self.fixed_uniform = np.ones(len(self.hyperparams)) / len(self.hyperparams), np.ones(len(self.hyperparams)) / len(self.hyperparams)
         self.reinitialize_model = reinitialization
         self.epsilon = epsilon
@@ -71,6 +90,12 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.eta = eta
         self.discount_factor = discount_factor,
         self.use_gain_avg = use_gain_avg
+        self.gain_history_len = gain_history_len
+        self.gamma = gamma
+        self.max_penalty = max_penalty
+        self.penalty_growth_rate = penalty_growth_rate
+        self.use_penalty = use_penalty
+        self.distribution_adjustment = distribution_adjustment
         self.net = initial_net
         self.net.to(DEVICE)
         initial_params = [param.cpu().detach().numpy() for _, param in self.net.state_dict().items()]
@@ -83,7 +108,8 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.rtpt = RTPT('JS', 'HANF_Server', 20)
         self.rtpt.start()
         self.distribution_history = []
-        self.gain_history = [] # initialize with [0] to avoid nan-values in discounted mean
+        self.hyperparam_agnostic_gain_history = [] # store gains made in past rounds, ignores which hyperparameter lead to this gain
+        self.gain_history = [] # store last n gains-arrays, does not ignore which hyperparameter lead to this gain
 
     def aggregate_fit(
         self,
@@ -120,10 +146,14 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.distribution_history.append(self.distribution)
         dh = np.array(self.distribution_history)
         df = pd.DataFrame(dh)
-        df.to_csv('distribution_history_{}.csv'.format(self.date))
+        df.to_csv('hyperparam-logs/distribution_history_{}.csv'.format(self.date))
 
         # update distribution NOTE: Activate again for full HANF!
         gains = self.compute_gains(weights, results)
+        # TODO: Maybe create own strategy for use of penalty?
+        if len(self.gain_history) == self.gain_history_len:
+            self.gain_history = self.gain_history[:(self.gain_history_len - 1)]
+        self.gain_history.append(gains)
         self.update_distribution(gains, weights)
 
         #self.writer.add_histogram('gains', gains, self.current_round)
@@ -195,8 +225,8 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         """
         Computes the average gains/progress the model made during the last fit-call.
         Each client computes its validation loss before and after a backpop-step.
-        The difference before - after is averaged and we compute (avg_before - avg_after) - gain_history.
-        The gain_history is a discounted mean telling us how much gain we have obtained in the last
+        The difference before - after is averaged and we compute (avg_before - avg_after) - hyperparam_agnostic_gain_history.
+        The hyperparam_agnostic_gain_history is a discounted mean telling us how much gain we have obtained in the last
         rounds. If we obtain a better gain than in history, we will emphasize the corresponding
         hyperparameter-configurations in the distribution, if not these configurations get less
         likely to be sampled in the next round.
@@ -212,10 +242,10 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         before_losses = [res.metrics['before'] for _, res in results]
         hidxs = [res.metrics['hidx'] for _, res in results]
         avg_gains = np.array([w * (a - b) for w, a, b in zip(weights, after_losses, before_losses)]).sum()
-        self.gain_history.append(avg_gains)
+        self.hyperparam_agnostic_gain_history.append(avg_gains)
         gains = []
         # use gain-history to obtain how much we improved on "average" in history
-        baseline = discounted_mean(np.array(self.gain_history), self.discount_factor) if len(self.gain_history) > 0 else 0.0
+        baseline = discounted_mean(np.array(self.hyperparam_agnostic_gain_history), self.discount_factor) if len(self.hyperparam_agnostic_gain_history) > 0 else 0.0
         for hidx, al, bl, w in zip(hidxs, after_losses, before_losses, weights):
             gain = w * ((al - bl) - baseline) if self.use_gain_avg else w * (al - bl)
             client_gains = np.zeros(len(self.hyperparams))
@@ -224,6 +254,14 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         gains = np.array(gains)
         gains = gains.sum(axis=0)
         return gains
+
+    def update_gain_history(self, weights, results):
+        after_losses = [res.metrics['after'] for _, res in results]
+        before_losses = [res.metrics['before'] for _, res in results]
+        hidxs = [res.metrics['hidx'] for _, res in results]
+        gains = np.zeros(len(self.distribution))
+        for hidx, al, bl, w in zip(hidxs, after_losses, before_losses, weights):
+            gains[hidx] = w * (al - bl)
     
     def update_distribution(self, gains, weights):
         """
@@ -239,10 +277,14 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             weights (_type_): Weights of clients
         """
         gains = gains / self.distribution * np.sum(weights)
-        #bound_gains = expit(20, 0.3, gains, 0.2)
         gains[gains > 500] = 500
         gains[gains < -500] = -500
-        self.distribution = self.distribution * np.exp(-self.eta*gains)
+        if self.use_penalty:
+            np_gain_history = np.array(self.gain_history)
+            penalty = stuck_penalty(self.gamma, np_gain_history, self.max_penalty, self.penalty_growth_rate)
+            self.distribution = self.distribution * np.exp((-self.eta*gains) - penalty)
+        else:
+            self.distribution = self.distribution * np.exp(-self.eta*gains)
         self.distribution = self.distribution / self.distribution.sum()
         # bound distribution's mode
         diffs = self.distribution - self.epsilon
@@ -250,8 +292,14 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         for j in js:
             for idx in range(len(self.distribution) - 1):
                 i = idx - j
-                indicator = 1 if i != 0 else -1
-                self.distribution[idx] = self.distribution[idx] + indicator * np.exp(-self.beta * abs(i)) * diffs[j]
+                if self.distribution_adjustment == 'exp':
+                    indicator = 1 if i != 0 else -1
+                    self.distribution[idx] = self.distribution[idx] + indicator * np.exp(-self.beta * abs(i)) * diffs[j]
+                elif self.distribution_adjustment == 'uniform':
+                    indicator = 1 if i != 0 else 0
+                    self.distribution[idx] = self.distribution[idx] + indicator * diffs[j] / (len(self.distribution) - 1)
+            if self.distribution_adjustment == 'uniform':
+                self.distribution[j] = self.distribution[j] - diffs[j]
         self.distribution = self.distribution / self.distribution.sum()
 
     def evaluate(self, parameters: fl.common.typing.Parameters):

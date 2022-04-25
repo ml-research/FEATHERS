@@ -36,14 +36,20 @@ class DartsTrainer:
                                         batch_size=batch_size,
                                         pin_memory=True,
                                         num_workers=2)
+        self.optimizer = None
 
     def set_current_hyperparameter_config(self, hyperparam, idx):
         self.hyperparam_config = hyperparam
         self.hyperparam_idx = idx
+        if self.optimizer is None:
+            self.optimizer = torch.optim.SGD(self.model.parameters(), hyperparam, 0.9, weight_decay=0)
+        else:
+            for g in self.optimizer.param_groups:
+                g['lr'] = hyperparam
 
     
     def train_one_epoch(self, epoch):
-        self.optimizer = torch.optim.SGD(self.model.parameters(), self.hyperparam_config, 0.9, weight_decay=0)
+        # self.optimizer = torch.optim.SGD(self.model.parameters(), self.hyperparam_config, 0.9, weight_decay=0)
         self.model.train()
         running_val_loss, running_train_loss = 0, 0
 

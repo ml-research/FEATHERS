@@ -36,6 +36,45 @@ class FashionMNISTLoader:
     def get_test(self):
         return self.test_set
 
+class CIFAR10Loader:
+
+    _instance = None
+
+    def __init__(self, n_clients) -> None:
+        if CIFAR10Loader._instance is not None:
+            raise RuntimeError("CIFAR10Loader is a singleton, use instance()")
+        self.n_clients = n_clients
+        self._load_fmnist()
+        
+    @classmethod
+    def instance(cls, n_clients=2):
+        if CIFAR10Loader._instance is None:
+            CIFAR10Loader._instance = CIFAR10Loader(n_clients)
+        return CIFAR10Loader._instance
+
+    def _load_fmnist(self):
+        """
+        Loads the Fashion-MNIST dataset
+        """
+        transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize(0, 1)])
+        train_data = torchvision.datasets.CIFAR10('../../../datasets/cifar10/', download=True, train=True, transform=transform)
+        val_data = torchvision.datasets.CIFAR10('../../../datasets/cifar10/', download=True, train=False, transform=transform)
+        self.train_partitions, self.val_partitions, self.test_set = partition_data(train_data, val_data, self.n_clients)
+        
+    def get_client_data(self):
+        for train, val in zip(self.train_partitions, self.val_partitions):
+            yield train, val
+
+    def get_test(self):
+        return self.test_set
+
+def get_dataset_loder(dataset, num_clients):
+    if dataset == 'fmnist':
+        return FashionMNISTLoader.instance(num_clients)
+    elif dataset == 'cifar10':
+        return CIFAR10Loader.instance(num_clients)
+    else:
+        raise ValueError('{} is not supported'.format(dataset))
 
 def partition_data(train_set, val_set, n_clients):
     train_len = len(train_set)
