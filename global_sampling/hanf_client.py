@@ -99,4 +99,5 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
 
 
 if __name__ == "__main__":
-    main(config.DATASET, config.CLIENT_NR)
+    main(config.DATASET, config.CLIENT_NR, config.CLASSES, config.CELL_NR, 
+        config.IN_CHANNELS, config.OUT_CHANNELS, config.NODE_NR)
