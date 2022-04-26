@@ -9,6 +9,7 @@ from model import Classifier
 from trainer import DartsTrainer
 from rtpt import RTPT
 import config
+from hyperparameters import Hyperparameters
 
 warnings.filterwarnings("ignore", category=UserWarning)
 DEVICE = torch.device("cuda:7" if torch.cuda.is_available() else "cpu")
@@ -60,6 +61,7 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
         def __init__(self, *args, **kwargs) -> None:
             super().__init__(*args, **kwargs)
             self.epoch = 0
+            self.hyperparameters = Hyperparameters.instance(config.HYPERPARAM_CONFIG_NR)
 
         def get_parameters(self):
             return [val.cpu().numpy() for _, val in darts_trainer.model.state_dict().items()]
