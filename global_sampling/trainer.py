@@ -42,10 +42,10 @@ class DartsTrainer:
         self.hyperparam_config = hyperparam
         self.hyperparam_idx = idx
         if self.optimizer is None:
-            self.optimizer = torch.optim.SGD(self.model.parameters(), hyperparam, 0.9, weight_decay=0)
+            self.optimizer = torch.optim.SGD(self.model.parameters(), self.hyperparam_config['learning_rate'], 0.9, weight_decay=0)
         else:
             for g in self.optimizer.param_groups:
-                g['lr'] = hyperparam
+                g['lr'] = self.hyperparam_config['learning_rate']
 
     
     def train_one_epoch(self, epoch):

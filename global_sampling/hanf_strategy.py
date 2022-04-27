@@ -3,7 +3,7 @@ import flwr as fl
 import numpy as np
 import pandas as pd
 from numproto import proto_to_ndarray, ndarray_to_proto
-from helpers import ProtobufNumpyArray, log_model_weights, log_hyper_configs, log_hyper_params
+from helpers import ProtobufNumpyArray, log_model_weights, log_hyper_config, log_hyper_params
 from utils import discounted_mean, get_dataset_loder
 from collections import OrderedDict
 import torch
@@ -12,6 +12,7 @@ from tensorboardX import SummaryWriter
 from rtpt import RTPT
 from datetime import datetime as dt
 import config
+from hyperparameters import Hyperparameters
 
 DEVICE = torch.device("cuda:8" if torch.cuda.is_available() else "cpu")
 
@@ -81,9 +82,9 @@ class HANFStrategy(fl.server.strategy.FedAvg):
                                 around those for which p(configuration) > epsilon holds. Smaller beta leads to a more wide-spread distribution. Defaults to 1.
         """
         super().__init__(fraction_fit=fraction_fit, fraction_eval=fraction_eval, **args)
-        self.hyperparams = np.sort(10 ** (np.random.uniform(-4, 0, 40))) # sorting is important for distribution update in case distribution_adjustment='exp'
+        self.hyperparams = Hyperparameters.instance(config.HYPERPARAM_CONFIG_NR)
         self.date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
-        log_hyper_params({'learning_rates': self.hyperparams}, 'hyperparam-logs/hyperparameters_{}.json'.format(self.date))
+        log_hyper_params(self.hyperparams.to_dict(), 'hyperparam-logs/hyperparameters_{}.json'.format(self.date))
         self.distribution = np.ones(len(self.hyperparams)) / len(self.hyperparams)
         self.reinitialize_model = reinitialization
         self.epsilon = epsilon
@@ -105,7 +106,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.test_data = dataset_iterator.get_test()
         self.test_loader = DataLoader(self.test_data, batch_size=64, pin_memory=True, num_workers=2)
         self.current_round = 1
-        self.writer = SummaryWriter(log_dir)
+        self.writer = SummaryWriter(log_dir + 'Server_{}'.format(self.date))
         self.rtpt = RTPT('JS', 'HANF_Server', config.ROUNDS)
         self.rtpt.start()
         self.distribution_history = []
@@ -149,24 +150,19 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         df = pd.DataFrame(dh)
         df.to_csv('hyperparam-logs/distribution_history_{}.csv'.format(self.date))
 
-        # update distribution NOTE: Activate again for full HANF!
         gains = self.compute_gains(weights, results)
-        # TODO: Maybe create own strategy for use of penalty?
         if len(self.gain_history) == self.gain_history_len:
-            self.gain_history = self.gain_history[:(self.gain_history_len - 1)]
+            self.gain_history = self.gain_history[1:]
         self.gain_history.append(gains)
         self.update_distribution(gains, weights)
-
-        #self.writer.add_histogram('gains', gains, self.current_round)
-        hyper_configs = [res.metrics for _, res in results]
-        log_hyper_configs(hyper_configs, self.current_round, self.writer)
         
         # sample hyperparameters and append them to the parameters
         hyp_param, hidx = self._sample_hyperparams()
-        serialized_hparam = ndarray_to_proto(np.array([hyp_param]))
         serialized_hidx = ndarray_to_proto(np.array([hidx]))
-        aggregated_weights.tensors.append(serialized_hparam.ndarray)
         aggregated_weights.tensors.append(serialized_hidx.ndarray)
+
+        # log next hyperparam-configuration
+        log_hyper_config(hyp_param, rnd, self.writer)
         return aggregated_weights, {}
 
     def _sample_hyperparams(self):
@@ -211,9 +207,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             _type_: Initial model weights, distribution and hyperparameter configurations.
         """
         hyp_param, hidx = self._sample_hyperparams()
-        serialized_hparam = ndarray_to_proto(np.array([hyp_param]))
         serialized_hidx = ndarray_to_proto(np.array([hidx]))
-        self.initial_parameters.tensors.append(serialized_hparam.ndarray)
         self.initial_parameters.tensors.append(serialized_hidx.ndarray)
         return self.initial_parameters
 
@@ -255,14 +249,6 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         gains = np.array(gains)
         gains = gains.sum(axis=0)
         return gains
-
-    def update_gain_history(self, weights, results):
-        after_losses = [res.metrics['after'] for _, res in results]
-        before_losses = [res.metrics['before'] for _, res in results]
-        hidxs = [res.metrics['hidx'] for _, res in results]
-        gains = np.zeros(len(self.distribution))
-        for hidx, al, bl, w in zip(hidxs, after_losses, before_losses, weights):
-            gains[hidx] = w * (al - bl)
     
     def update_distribution(self, gains, weights):
         """

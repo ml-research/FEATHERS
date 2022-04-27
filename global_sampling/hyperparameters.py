@@ -8,7 +8,7 @@ class Hyperparameters:
         if Hyperparameters._instance is not None:
             raise RuntimeError("Hyperparameters is a singleton, use instance()")
         self.sample_hyperparams = lambda: {
-            'learning_rate': np.sort(10 ** (np.random.uniform(-4, 0)))
+            'learning_rate': 10 ** (np.random.uniform(-4, 0))
         }
         self.hyperparams = [self.sample_hyperparams() for _ in range(nr_configs)]
         
@@ -23,3 +23,13 @@ class Hyperparameters:
 
     def __len__(self):
         return len(self.hyperparams)
+
+    def to_dict(self):
+        hyperparam_dict = {}
+        for config in self.hyperparams:
+            for key, val in config.items():
+                if key in hyperparam_dict.keys():
+                    hyperparam_dict[key].append(val)
+                else:
+                    hyperparam_dict[key] = [val]
+        return hyperparam_dict

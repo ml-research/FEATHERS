@@ -68,11 +68,12 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
 
         def set_parameters_train(self, parameters, config):
             # obtain hyperparams and distribution
-            hyperparams, hidx = float(parameters[-2][0]), int(parameters[-1][0])
+            hidx = int(parameters[-1][0])
+            hyperparams = self.hyperparameters[hidx]
             darts_trainer.set_current_hyperparameter_config(hyperparams, hidx)
             
             # remove hyperparameter distribution from parameter list
-            parameters = parameters[:-2]
+            parameters = parameters[:-1]
             
             params_dict = zip(darts_trainer.model.state_dict().keys(), parameters)
             state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
@@ -89,7 +90,7 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
             model_params = self.get_parameters()
             self.epoch += 1
             rtpt.step()
-            return model_params, len(train_data), {'lr': hconfig, 'hidx': int(hidx), 'before': float(before_loss), 'after': float(after_loss)}
+            return model_params, len(train_data), {'hidx': int(hidx), 'before': float(before_loss), 'after': float(after_loss)}
 
         def evaluate(self, parameters, config):
             self.set_parameters_evaluate(parameters)
