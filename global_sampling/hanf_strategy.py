@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 from rtpt import RTPT
 from datetime import datetime as dt
+from scipy.special import logsumexp
 
 DEVICE = torch.device("cuda:8" if torch.cuda.is_available() else "cpu")
 
@@ -65,7 +66,8 @@ class HANFStrategy(fl.server.strategy.FedAvg):
     def __init__(self, fraction_fit, fraction_eval, initial_net, 
                 log_dir='./runs/', epsilon=0.8, beta=1, eta=0.1, distribution_adjustment='uniform',
                 discount_factor=0.9, use_gain_avg=False, reinitialization=False,
-                gain_history_len=5, gamma=0.9, max_penalty=20, penalty_growth_rate=0.01, use_penalty=True, **args) -> None:
+                gain_history_len=5, gamma=0.9, max_penalty=20, penalty_growth_rate=0.01, 
+                use_penalty=True, **args) -> None:
         """
         Intitialize the HANF strategy used by flwr to aggregation of model parameters.
 
@@ -83,7 +85,8 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.hyperparams = np.sort(10 ** (np.random.uniform(-4, 0, 40))) # sorting is important for distribution update
         self.date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
         log_hyper_params({'learning_rates': self.hyperparams}, 'hyperparam-logs/hyperparameters_{}.json'.format(self.date))
-        self.distribution, self.fixed_uniform = np.ones(len(self.hyperparams)) / len(self.hyperparams), np.ones(len(self.hyperparams)) / len(self.hyperparams)
+        self.log_distribution = np.full(len(self.hyperparams), -np.log(self.hyperparams))
+        self.distribution = np.exp(self.log_distribution)
         self.reinitialize_model = reinitialization
         self.epsilon = epsilon
         self.beta = beta
@@ -276,31 +279,36 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             gains (_type_): Gains obtained in last round
             weights (_type_): Weights of clients
         """
-        gains = gains / self.distribution * np.sum(weights)
-        gains[gains > 500] = 500
-        gains[gains < -500] = -500
-        if self.use_penalty:
-            np_gain_history = np.array(self.gain_history)
-            penalty = stuck_penalty(self.gamma, np_gain_history, self.max_penalty, self.penalty_growth_rate)
-            self.distribution = self.distribution * np.exp((-self.eta*gains) - penalty)
-        else:
-            self.distribution = self.distribution * np.exp(-self.eta*gains)
-        self.distribution = self.distribution / self.distribution.sum()
-        # bound distribution's mode
-        diffs = self.distribution - self.epsilon
-        js = np.argwhere(diffs > 0)
-        for j in js:
-            for idx in range(len(self.distribution) - 1):
-                i = idx - j
-                if self.distribution_adjustment == 'exp':
-                    indicator = 1 if i != 0 else -1
-                    self.distribution[idx] = self.distribution[idx] + indicator * np.exp(-self.beta * abs(i)) * diffs[j]
-                elif self.distribution_adjustment == 'uniform':
-                    indicator = 1 if i != 0 else 0
-                    self.distribution[idx] = self.distribution[idx] + indicator * diffs[j] / (len(self.distribution) - 1)
-            if self.distribution_adjustment == 'uniform':
-                self.distribution[j] = self.distribution[j] - diffs[j]
-        self.distribution = self.distribution / self.distribution.sum()
+        #gains = gains / self.distribution * np.sum(weights)
+        #gains[gains > 500] = 500
+        #gains[gains < -500] = -500
+        #if self.use_penalty:
+        #    np_gain_history = np.array(self.gain_history)
+        #    penalty = stuck_penalty(self.gamma, np_gain_history, self.max_penalty, self.penalty_growth_rate)
+        #    self.distribution = self.distribution * np.exp((-self.eta*gains) - penalty)
+        #else:
+        #    self.distribution = self.distribution * np.exp(-self.eta*gains)
+        #self.distribution = self.distribution / self.distribution.sum()
+        ## bound distribution's mode
+        #diffs = self.distribution - self.epsilon
+        #js = np.argwhere(diffs > 0)
+        #for j in js:
+        #    for idx in range(len(self.distribution) - 1):
+        #        i = idx - j
+        #        if self.distribution_adjustment == 'exp':
+        #            indicator = 1 if i != 0 else -1
+        #            self.distribution[idx] = self.distribution[idx] + indicator * np.exp(-self.beta * abs(i)) * diffs[j]
+        #        elif self.distribution_adjustment == 'uniform':
+        #            indicator = 1 if i != 0 else 0
+        #            self.distribution[idx] = self.distribution[idx] + indicator * diffs[j] / (len(self.distribution) - 1)
+        #    if self.distribution_adjustment == 'uniform':
+        #        self.distribution[j] = self.distribution[j] - diffs[j]
+        #self.distribution = self.distribution / self.distribution.sum()
+
+        self.log_distribution -= self.eta * gains
+        self.log_distribution -= logsumexp(self.log_distribution)
+        self.distribution = np.exp(self.log_distribution)
+
 
     def evaluate(self, parameters: fl.common.typing.Parameters):
         params = []
