@@ -88,7 +88,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.hyperparams = Hyperparameters.instance(config.HYPERPARAM_CONFIG_NR)
         self.date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
         log_hyper_params(self.hyperparams.to_dict(), 'hyperparam-logs/hyperparameters_{}.json'.format(self.date))
-        self.log_distribution = np.full(len(self.hyperparams), -np.log(self.hyperparams))
+        self.log_distribution = np.full(len(self.hyperparams), -np.log(len(self.hyperparams)))
         self.distribution = np.exp(self.log_distribution)
         self.reinitialize_model = reinitialization
         self.epsilon = epsilon
