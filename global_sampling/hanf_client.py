@@ -68,8 +68,8 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
 
         def set_parameters_train(self, parameters, config):
             # obtain hyperparams and distribution
-            hidx = int(parameters[-1][0])
-            hyperparams = self.hyperparameters[hidx]
+            self.distribution = parameters[-1]
+            hyperparams, hidx = self._sample_hyperparams()
             darts_trainer.set_current_hyperparameter_config(hyperparams, hidx)
             
             # remove hyperparameter distribution from parameter list
@@ -96,6 +96,13 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
             self.set_parameters_evaluate(parameters)
             loss, accuracy = _test(darts_trainer.model, darts_trainer.valid_loader)
             return float(loss), len(test_data), {"accuracy": float(accuracy)}
+
+        def _sample_hyperparams(self):
+            # obtain new learning rate for this batch
+            distribution = torch.distributions.Categorical(torch.FloatTensor(self.distribution))
+            hyp_idx = distribution.sample().item()
+            hyp_config = self.hyperparameters[hyp_idx]
+            return hyp_config, hyp_idx
 
     # Start client
     fl.client.start_numpy_client("[::]:8085", client=HANFClient())

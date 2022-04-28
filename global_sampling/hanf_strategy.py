@@ -14,6 +14,7 @@ from datetime import datetime as dt
 import config
 from hyperparameters import Hyperparameters
 from scipy.special import logsumexp
+from numpy.linalg import norm
 
 DEVICE = torch.device("cuda:8" if torch.cuda.is_available() else "cpu")
 
@@ -92,7 +93,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.reinitialize_model = reinitialization
         self.epsilon = epsilon
         self.beta = beta
-        self.eta = eta
+        self.eta = np.sqrt(2*np.log(len(self.hyperparams)))
         self.discount_factor = discount_factor,
         self.use_gain_avg = use_gain_avg
         self.gain_history_len = gain_history_len
@@ -113,7 +114,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.rtpt = RTPT('JS', 'HANF_Server', config.ROUNDS)
         self.rtpt.start()
         self.distribution_history = []
-        self.hyperparam_agnostic_gain_history = [] # store gains made in past rounds, ignores which hyperparameter lead to this gain
+        self.loss_history = [] # store gains made in past rounds, ignores which hyperparameter lead to this gain
         self.gain_history = [] # store last n gains-arrays, does not ignore which hyperparameter lead to this gain
 
     def aggregate_fit(
@@ -160,12 +161,14 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.update_distribution(gains, weights)
         
         # sample hyperparameters and append them to the parameters
-        hyp_param, hidx = self._sample_hyperparams()
-        serialized_hidx = ndarray_to_proto(np.array([hidx]))
-        aggregated_weights.tensors.append(serialized_hidx.ndarray)
+        serialized_dist = ndarray_to_proto(self.distribution)
+        aggregated_weights.tensors.append(serialized_dist.ndarray)
 
-        # log next hyperparam-configuration
-        log_hyper_config(hyp_param, rnd, self.writer)
+        # log last hyperparam-configuration
+        for _, res in results:
+            hidx = res.metrics['hidx']
+            config = self.hyperparams[hidx]
+            log_hyper_config(config, rnd, self.writer)
         return aggregated_weights, {}
 
     def _sample_hyperparams(self):
@@ -209,9 +212,8 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         Returns:
             _type_: Initial model weights, distribution and hyperparameter configurations.
         """
-        hyp_param, hidx = self._sample_hyperparams()
-        serialized_hidx = ndarray_to_proto(np.array([hidx]))
-        self.initial_parameters.tensors.append(serialized_hidx.ndarray)
+        serialized_dist = ndarray_to_proto(self.distribution)
+        self.initial_parameters.tensors.append(serialized_dist.ndarray)
         return self.initial_parameters
 
     def set_parameters(self, parameters):
@@ -239,13 +241,13 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         after_losses = [res.metrics['after'] for _, res in results]
         before_losses = [res.metrics['before'] for _, res in results]
         hidxs = [res.metrics['hidx'] for _, res in results]
-        avg_gains = np.array([w * (a - b) for w, a, b in zip(weights, after_losses, before_losses)]).sum()
-        self.hyperparam_agnostic_gain_history.append(avg_gains)
+        avg_loss = np.array([w * a for w, a in zip(weights, after_losses)]).sum()
         gains = []
         # use gain-history to obtain how much we improved on "average" in history
-        baseline = discounted_mean(np.array(self.hyperparam_agnostic_gain_history), self.discount_factor) if len(self.hyperparam_agnostic_gain_history) > 0 else 0.0
+        baseline = discounted_mean(np.array(self.loss_history), self.discount_factor) if len(self.loss_history) > 0 else 0.0
+        self.loss_history.append(avg_loss)
         for hidx, al, bl, w in zip(hidxs, after_losses, before_losses, weights):
-            gain = w * ((al - bl) - baseline) if self.use_gain_avg else w * (al - bl)
+            gain = w * (al - baseline) if self.use_gain_avg else w * (al - bl)
             client_gains = np.zeros(len(self.hyperparams))
             client_gains[hidx] = gain
             gains.append(client_gains)
@@ -292,7 +294,8 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         #        self.distribution[j] = self.distribution[j] - diffs[j]
         #self.distribution = self.distribution / self.distribution.sum()
 
-        self.log_distribution -= self.eta * gains
+        denom = 1.0 if np.all(gains == 0.0) else norm(gains, float('inf'))
+        self.log_distribution -= self.eta / denom * gains
         self.log_distribution -= logsumexp(self.log_distribution)
         self.distribution = np.exp(self.log_distribution)
 
