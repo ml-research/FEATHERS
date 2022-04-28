@@ -16,7 +16,7 @@ from hyperparameters import Hyperparameters
 from scipy.special import logsumexp
 from numpy.linalg import norm
 
-DEVICE = torch.device("cuda:8" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:5" if torch.cuda.is_available() else "cpu")
 
 def _test(net, testloader, writer, round):
     """Validate the network on the entire test set."""

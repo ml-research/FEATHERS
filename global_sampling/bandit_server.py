@@ -1,5 +1,5 @@
 import flwr as fl
-from hanf_strategy import HANFStrategy
+from hanf_bandit_strategy import HANFStrategy
 import torch.nn as nn
 from model import Classifier
 import config
@@ -15,14 +15,6 @@ def start_server(beta, epsilon, eta, log_dir, rounds, reinit,
         fraction_fit=0.5,
         fraction_eval=0.5,
         initial_net=net,
-        beta=beta,
-        epsilon=epsilon,
-        eta=eta,
-        reinitialization=reinit,
-        log_dir=log_dir,
-        min_available_clients=num_clients,
-        min_eval_clients=num_val_clients,
-        min_fit_clients=num_fit_clients
     )
 
     # Start server

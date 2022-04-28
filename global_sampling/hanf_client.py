@@ -12,7 +12,7 @@ import config
 from hyperparameters import Hyperparameters
 
 warnings.filterwarnings("ignore", category=UserWarning)
-DEVICE = torch.device("cuda:7" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
 EPOCHS = 1
 
 

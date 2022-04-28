@@ -13,7 +13,7 @@ import config
 from hyperparameters import Hyperparameters
 
 warnings.filterwarnings("ignore", category=UserWarning)
-DEVICE = torch.device("cuda:7" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
 EPOCHS = 1
 
 
@@ -104,12 +104,12 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
                 hidx = np.random.randint(0, len(self.hyperparameters))
                 config = self.hyperparameters[hidx]
             else:
-                m = np.argmax(self.reward_estimates)
-                config = self.hyperparameters[m]
+                hidx = np.argmax(self.reward_estimates)
+                config = self.hyperparameters[hidx]
             return hidx, config
 
     # Start client
-    fl.client.start_numpy_client("[::]:8085", client=HANFClient())
+    fl.client.start_numpy_client("[::]:8086", client=HANFClient())
 
 
 if __name__ == "__main__":
