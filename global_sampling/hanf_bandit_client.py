@@ -99,7 +99,7 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
             return float(loss), len(test_data), {"accuracy": float(accuracy)}
 
         def get_hyperparams(self):
-            explore = np.random.choice([0, 1], p=[0.9, 0.1])
+            explore = np.random.choice([0, 1], p=[0.9, 0.1]) # NOTE: Change the p=[] parameter to adjust the epsilon. Sampling 0 means, we'll be greedy, sampling 1 means we'll sample a random config.
             if explore == 1:
                 hidx = np.random.randint(0, len(self.hyperparameters))
                 config = self.hyperparameters[hidx]
