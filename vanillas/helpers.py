@@ -9,9 +9,9 @@ def log_model_weights(model, step, writer):
         writer.add_histogram(name, weight, step)
     writer.flush()
 
-def log_hyper_configs(configs, step, writer):
-    for client_id, hyper_config in enumerate(configs):
-        writer.add_scalar('client_{}_learning_rate'.format(client_id), hyper_config['lr'], step)
+def log_hyper_config(config, step, writer):
+    for key, hyperparam in config.items():
+        writer.add_scalar(key, hyperparam, step)
 
 def log_hyper_params(hyper_param_dict):
     to_be_persisted = {k: list(v) for k, v in hyper_param_dict.items()}

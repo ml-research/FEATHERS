@@ -3,13 +3,15 @@ import flwr as fl
 import numpy as np
 import pandas as pd
 from numproto import proto_to_ndarray, ndarray_to_proto
-from helpers import ProtobufNumpyArray, log_model_weights, log_hyper_configs, log_hyper_params
+from helpers import ProtobufNumpyArray, log_model_weights, log_hyper_config, log_hyper_params
 from utils import FashionMNISTLoader, discounted_mean
 from collections import OrderedDict
 import torch
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 from rtpt import RTPT
+from scipy.special import logsumexp
+from numpy.linalg import norm
 
 DEVICE = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
@@ -62,10 +64,11 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         super().__init__(fraction_fit=fraction_fit, fraction_eval=fraction_eval, **args)
         self.hyperparams = np.sort(10 ** (np.random.uniform(-4, 0, 40))) # sorting is important for distribution update
         log_hyper_params({'learning_rates': self.hyperparams})
-        self.distribution, self.fixed_uniform = np.ones(len(self.hyperparams)) / len(self.hyperparams), np.ones(len(self.hyperparams)) / len(self.hyperparams)
+        self.log_distribution = np.full(len(self.hyperparams), -np.log(self.hyperparams))
+        self.distribution = np.exp(self.log_distribution)
         self.epsilon = epsilon
         self.beta = beta
-        self.nabla = nabla
+        self.eta = np.sqrt(2*np.log(len(self.hyperparams)))
         self.discount_factor = discount_factor,
         self.use_gain_avg = use_gain_avg
         self.net = initial_net
@@ -103,12 +106,6 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         # obtain client weights
         samples = np.array([fit_res[1].num_examples for fit_res in results])
         weights = samples / np.sum(samples)
-        #if model_improved(results, weights):
-        #    aggregated_weights, _ = super().aggregate_fit(rnd, results, failures)
-        #    self.last_weights = aggregated_weights
-        #else:
-        #    print("Model did not improve: Use last parameters") # NOTE: HANF!
-        #    aggregated_weights = self.last_weights
         aggregated_weights, _ = super().aggregate_fit(rnd, results, failures)
 
         # log current distribution
@@ -120,17 +117,17 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         # update distribution NOTE: Activate again for full HANF!
         gains = self.compute_gains(weights, results)
         self.update_distribution(gains, weights)
-
-        #self.writer.add_histogram('gains', gains, self.current_round)
-        hyper_configs = [res.metrics for _, res in results]
-        log_hyper_configs(hyper_configs, self.current_round, self.writer)
         
         # sample hyperparameters and append them to the parameters
-        hyp_param, hidx = self._sample_hyperparams()
-        serialized_hparam = ndarray_to_proto(np.array([hyp_param]))
-        serialized_hidx = ndarray_to_proto(np.array([hidx]))
-        aggregated_weights.tensors.append(serialized_hparam.ndarray)
-        aggregated_weights.tensors.append(serialized_hidx.ndarray)
+        serialized_dist = ndarray_to_proto(self.distribution)
+        aggregated_weights.tensors.append(serialized_dist.ndarray)
+
+        # log last hyperparam-configuration
+        for _, res in results:
+            hidx = res.metrics['hidx']
+            config = self.hyperparams[hidx]
+            log_hyper_config(config, rnd, self.writer)
+        self.writer.add_histogram('gains', gains, rnd)
         return aggregated_weights, {}
 
     def _sample_hyperparams(self):
@@ -174,11 +171,8 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         Returns:
             _type_: Initial model weights, distribution and hyperparameter configurations.
         """
-        hyp_param, hidx = self._sample_hyperparams()
-        serialized_hparam = ndarray_to_proto(np.array([hyp_param]))
-        serialized_hidx = ndarray_to_proto(np.array([hidx]))
-        self.initial_parameters.tensors.append(serialized_hparam.ndarray)
-        self.initial_parameters.tensors.append(serialized_hidx.ndarray)
+        serialized_dist = ndarray_to_proto(self.distribution)
+        self.initial_parameters.tensors.append(serialized_dist.ndarray)
         return self.initial_parameters
 
     def set_parameters(self, parameters):
@@ -234,21 +228,10 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             gains (_type_): Gains obtained in last round
             weights (_type_): Weights of clients
         """
-        gains = gains / self.distribution * np.sum(weights)
-        # bring gains into range [-100, 100] to avoid overflows in exp()
-        gains[gains > 100] = 100
-        gains[gains < -100] = -100
-        self.distribution = self.distribution * np.exp(-(self.nabla * gains))
-        self.distribution = self.distribution / self.distribution.sum()
-        # bound distribution's max-probability
-        diffs = self.distribution - self.epsilon
-        js = np.argwhere(diffs > 0)
-        for j in js:
-            for idx in range(len(self.distribution) - 1):
-                i = idx - j
-                indicator = 1 if i != 0 else -1
-                self.distribution[idx] = self.distribution[idx] + indicator * np.exp(-self.beta * abs(i)) * diffs[j]
-        self.distribution = self.distribution / self.distribution.sum()
+        denom = 1.0 if np.all(gains == 0.0) else norm(gains, float('inf'))
+        self.log_distribution -= self.eta / denom * gains
+        self.log_distribution -= logsumexp(self.log_distribution)
+        self.distribution = np.exp(self.log_distribution)
 
     def evaluate(self, parameters: fl.common.typing.Parameters):
         params = []

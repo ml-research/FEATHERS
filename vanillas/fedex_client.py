@@ -86,11 +86,11 @@ def main():
 
         def set_parameters_train(self, parameters, config):
             # obtain hyperparams and distribution
-            self.hyperparam_config = float(parameters[-2][0])
-            self.hidx = int(parameters[-1][0])
+            self.distribution = parameters[-1]
+            self.hyperparam_config, self.hidx = self._sample_hyperparams()
             
             # remove hyperparameter distribution from parameter list
-            parameters = parameters[:-2]
+            parameters = parameters[:-1]
             
             params_dict = zip(net.state_dict().keys(), parameters)
             state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
@@ -116,6 +116,13 @@ def main():
             self.set_parameters_evaluate(parameters)
             loss, accuracy = _test(net, test_data)
             return float(loss), len(test_data), {"accuracy": float(accuracy)}
+
+        def _sample_hyperparams(self):
+            # obtain new learning rate for this batch
+            distribution = torch.distributions.Categorical(torch.FloatTensor(self.distribution))
+            hyp_idx = distribution.sample().item()
+            hyp_config = self.hyperparams[hyp_idx]
+            return hyp_config, hyp_idx
 
     # Start client
     fl.client.start_numpy_client("[::]:8081", client=MyClient())
