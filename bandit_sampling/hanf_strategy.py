@@ -16,7 +16,7 @@ from hyperparameters import Hyperparameters
 from scipy.special import logsumexp
 from numpy.linalg import norm
 
-DEVICE = torch.device("cuda:5" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 def _test(net, testloader, writer, round):
     """Validate the network on the entire test set."""
@@ -42,7 +42,7 @@ def _test(net, testloader, writer, round):
 class HANFStrategy(fl.server.strategy.FedAvg):
 
     def __init__(self, fraction_fit, fraction_eval, initial_net, 
-                log_dir='./runs/', use_gain_avg=False, alpha=0.01, discount_factor=0.9, **args) -> None:
+                log_dir='./runs/', use_gain_avg=False, alpha=0.01, baseline_discount=0.9, **args) -> None:
         """
         Intitialize the HANF strategy used by flwr to aggregation of model parameters.
 
@@ -75,7 +75,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.reward_estimates = np.zeros(len(self.hyperparams))
         self.alpha = alpha
         self.loss_history = []
-        self.discount_factor = discount_factor
+        self.discount_factor = baseline_discount
 
     def aggregate_fit(
         self,
