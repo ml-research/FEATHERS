@@ -15,7 +15,7 @@ from tensorboardX import SummaryWriter
 from datetime import datetime as dt
 
 warnings.filterwarnings("ignore", category=UserWarning)
-DEVICE = torch.device("cuda:7" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
 EPOCHS = 1
 
 
@@ -117,7 +117,7 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
             return hidx, config
 
     # Start client
-    fl.client.start_numpy_client("[::]:8070", client=HANFClient())
+    fl.client.start_numpy_client("[::]:{}".format(config.PORT), client=HANFClient())
 
 
 if __name__ == "__main__":

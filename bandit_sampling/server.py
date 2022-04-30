@@ -18,7 +18,7 @@ def start_server(rounds):
 
     # Start server
     fl.server.start_server(
-        server_address="[::]:8070",
+        server_address="[::]:{}".format(config.PORT),
         config={"num_rounds": rounds},
         strategy=strategy,
     )
