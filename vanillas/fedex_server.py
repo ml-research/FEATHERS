@@ -1,5 +1,5 @@
 import flwr as fl
-from hanf_strategy import HANFStrategy
+from bandit_strategy import HANFStrategy
 import torch.nn as nn
 from fedex_model import Net
 import argparse
@@ -20,14 +20,14 @@ def start_server(beta, epsilon, log_dir, rounds):
 
     # Start server
     fl.server.start_server(
-        server_address="[::]:8081",
+        server_address="[::]:8071",
         config={"num_rounds": rounds},
         strategy=strategy,
     )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rounds', type=int, default=20)
+    parser.add_argument('--rounds', type=int, default=60)
     parser.add_argument('--log-dir')
     parser.add_argument('--beta', type=float, default=0.5)
     parser.add_argument('--epsilon', type=float, default=0.7)

@@ -11,9 +11,11 @@ from trainer import DartsTrainer
 from rtpt import RTPT
 import config
 from hyperparameters import Hyperparameters
+from tensorboardX import SummaryWriter
+from datetime import datetime as dt
 
 warnings.filterwarnings("ignore", category=UserWarning)
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:7" if torch.cuda.is_available() else "cpu")
 EPOCHS = 1
 
 
@@ -51,8 +53,10 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
     # Load data
     fashion_mnist_iterator = get_dataset_loder(dataset, num_clients)
     train_data, test_data = next(fashion_mnist_iterator.get_client_data())
+    date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
+    writer = SummaryWriter("./runs/Client_{}".format(date))
     darts_trainer = DartsTrainer(net, criterion, train_data, test_data, second_order_optim=True, 
-                                device=DEVICE, batch_size=64)
+                                device=DEVICE, batch_size=64, writer=writer)
     rtpt = RTPT('JS', 'HANF_Client', EPOCHS)
     rtpt.start()
 
@@ -71,8 +75,8 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
 
         def set_parameters_train(self, parameters, config):
             # obtain hyperparams and distribution
-            self.reward_estimates = parameters[-1]
-            hidx, hyperparams = self.get_hyperparams()
+            hidx = int(parameters[-1][0])
+            hyperparams = self.hyperparameters[hidx]
             darts_trainer.set_current_hyperparameter_config(hyperparams, hidx)
             
             # remove hyperparameter distribution from parameter list
@@ -101,6 +105,7 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
             return float(loss), len(test_data), {"accuracy": float(accuracy)}
 
         def get_hyperparams(self):
+            writer.add_scalar('epsilon', self.epsilon, self.epoch)
             explore = np.random.choice([0, 1], p=[1 - self.epsilon, self.epsilon])
             if explore == 1:
                 hidx = np.random.randint(0, len(self.hyperparameters))
@@ -112,7 +117,7 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
             return hidx, config
 
     # Start client
-    fl.client.start_numpy_client("[::]:8086", client=HANFClient())
+    fl.client.start_numpy_client("[::]:8070", client=HANFClient())
 
 
 if __name__ == "__main__":

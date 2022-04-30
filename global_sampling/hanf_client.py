@@ -105,7 +105,7 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
             return hyp_config, hyp_idx
 
     # Start client
-    fl.client.start_numpy_client("[::]:8085", client=HANFClient())
+    fl.client.start_numpy_client("[::]:8092", client=HANFClient())
 
 
 if __name__ == "__main__":

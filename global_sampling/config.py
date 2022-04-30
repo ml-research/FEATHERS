@@ -1,6 +1,6 @@
 # hyperparameter configuration parameters
 BETA = 0.5 # determines how widespread distribution adjustments are done
-ROUNDS = 50 # nr. of communication rounds
+ROUNDS = 110 # nr. of communication rounds
 EPSILON = 0.9 # determines max. probability mass one configuration can have
 ETA = 0.01 # Learning rate to update distribution
 HYPERPARAM_CONFIG_NR = 40 # size of hyperparameter search space

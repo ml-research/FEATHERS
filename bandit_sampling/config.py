@@ -1,7 +1,7 @@
 # hyperparameter configuration parameters
 ROUNDS = 50 # nr. of communication rounds
 EPSILON = 1. # determines probability of exploring, i.e. random sampling
-EPSILON_DISCOUNT = 0.95 # percentage of epsilon remaining after each iteration. That is, in each iteration we compute epsilon = epsilon * epsilon_discount. If 1, nothing happens
+EPSILON_DISCOUNT = 0.99 # percentage of epsilon remaining after each iteration. That is, in each iteration we compute epsilon = epsilon * epsilon_discount. If 1, nothing happens
 HYPERPARAM_CONFIG_NR = 40 # size of hyperparameter search space
 
 # logging

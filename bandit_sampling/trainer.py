@@ -13,7 +13,8 @@ warnings.filterwarnings('error')
 
 class DartsTrainer:
     def __init__(self, model, loss, dataset_train, dataset_valid,
-                 batch_size=64, device=None, arc_learning_rate=3.0E-4, second_order_optim=False):
+                 batch_size=64, device=None, arc_learning_rate=3.0E-4, 
+                 second_order_optim=False, writer=None):
 
         self.device = device if device is not None else torch.device("cpu")
         self.model = model
@@ -21,7 +22,7 @@ class DartsTrainer:
         self.dataset_train = dataset_train
         self.dataset_valid = dataset_valid
         date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
-        self.writer = SummaryWriter("./runs/Client_{}".format(date))
+        self.writer = SummaryWriter("./runs/Client_{}".format(date)) if writer is None else writer
         
         self.ctrl_optim = torch.optim.Adam(self.model.arch_parameters(), arc_learning_rate, betas=(0.5, 0.999),
                                            weight_decay=1.0E-5)

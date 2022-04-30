@@ -5,19 +5,16 @@ import numpy as np
 import pandas as pd
 from numproto import proto_to_ndarray, ndarray_to_proto
 from helpers import ProtobufNumpyArray, log_model_weights, log_hyper_config, log_hyper_params
-from utils import discounted_mean, get_dataset_loder
+from utils import FashionMNISTLoader, discounted_mean
 from collections import OrderedDict
 import torch
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 from rtpt import RTPT
-from datetime import datetime as dt
-import config
-from hyperparameters import Hyperparameters
 from scipy.special import logsumexp
 from numpy.linalg import norm
 
-DEVICE = torch.device("cuda:6" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:7" if torch.cuda.is_available() else "cpu")
 
 def _test(net, testloader, writer, round):
     """Validate the network on the entire test set."""
@@ -39,11 +36,19 @@ def _test(net, testloader, writer, round):
     accuracy = correct / total
     return loss, accuracy
 
+def model_improved(results, weights):
+    before_losses = np.array([res.metrics['before'] for _, res in results])
+    after_losses = np.array([res.metrics['after'] for _, res in results])
+    avg_before = np.sum(weights * before_losses)
+    avg_after = np.sum(weights * after_losses)
+    return (avg_after - avg_before) < 0
+
 
 class HANFStrategy(fl.server.strategy.FedAvg):
 
     def __init__(self, fraction_fit, fraction_eval, initial_net, 
-                log_dir='./runs/', use_gain_avg=False, alpha=0.1, baseline_discount=0.9, **args) -> None:
+                log_dir='./runs/', epsilon=0.8, beta=1, nabla=0.1, 
+                discount_factor=0.9, use_gain_avg=False, **args) -> None:
         """
         Intitialize the HANF strategy used by flwr to aggregation of model parameters.
 
@@ -58,26 +63,27 @@ class HANFStrategy(fl.server.strategy.FedAvg):
                                 around those for which p(configuration) > epsilon holds. Smaller beta leads to a more wide-spread distribution. Defaults to 1.
         """
         super().__init__(fraction_fit=fraction_fit, fraction_eval=fraction_eval, **args)
-        self.hyperparams = Hyperparameters.instance(config.HYPERPARAM_CONFIG_NR)
-        self.date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
-        log_hyper_params(self.hyperparams.to_dict(), 'hyperparam-logs/hyperparameters_{}.json'.format(self.date))
+        self.hyperparams = np.sort(10 ** (np.random.uniform(-4, 0, 40))) # sorting is important for distribution update
+        log_hyper_params({'learning_rates': self.hyperparams})
+        self.log_distribution = np.full(len(self.hyperparams), -np.log(self.hyperparams))
+        self.distribution = np.exp(self.log_distribution)
+        self.epsilon = epsilon
+        self.beta = beta
+        self.eta = np.sqrt(2*np.log(len(self.hyperparams)))
+        self.discount_factor = discount_factor,
         self.use_gain_avg = use_gain_avg
         self.net = initial_net
         self.net.to(DEVICE)
         initial_params = [param.cpu().detach().numpy() for _, param in self.net.state_dict().items()]
         self.initial_parameters = self.last_weights = fl.common.weights_to_parameters(initial_params)
-        dataset_iterator = get_dataset_loder(config.DATASET, config.CLIENT_NR)
-        self.test_data = dataset_iterator.get_test()
+        fashion_mnist_iterator = FashionMNISTLoader.instance(2)
+        self.test_data = fashion_mnist_iterator.get_test()
         self.test_loader = DataLoader(self.test_data, batch_size=64, pin_memory=True, num_workers=2)
         self.current_round = 0
-        self.writer = SummaryWriter(log_dir + 'Server_{}'.format(self.date))
-        self.rtpt = RTPT('JS', 'HANF_Server', config.ROUNDS)
+        self.writer = SummaryWriter(log_dir)
+        self.rtpt = RTPT('JS', 'HANF_Server', 20)
         self.rtpt.start()
-        self.reward_estimates = np.zeros(len(self.hyperparams))
-        self.alpha = alpha
-        self.loss_history = []
-        self.reward_history = []
-        self.discount_factor = baseline_discount
+        self.distribution_history = []
         self.gain_history = []
         self.current_config_idx = None
         self.old_weights = self.initial_parameters
@@ -132,11 +138,12 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             self.old_weights = aggregated_weights
         
         # sample hyperparameters and append them to the parameters
-        print(self.current_config_idx)
         serialized_idx = ndarray_to_proto(np.array([self.current_config_idx]))
+        serialized_hyperparams = ndarray_to_proto(self.hyperparams)
         aggregated_weights.tensors.append(serialized_idx.ndarray)
+        aggregated_weights.tensors.append(serialized_hyperparams.ndarray)
 
-        log_hyper_config(self.hyperparams[self.current_config_idx], rnd, self.writer)
+        self.writer.add_scalar('Learning Rate', self.hyperparams[self.current_config_idx], rnd)
 
         return aggregated_weights, {}
 
@@ -163,8 +170,8 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         weights = np.array([res.num_examples for _, res in results]) / summed_weights
         # compute mean accuracy and log it
         mean_accuracy = np.sum(accuracies * weights)
-        self.writer.add_scalar('Validation_Loss', loss, self.current_round)
-        self.writer.add_scalar('Validation_Accuracy', mean_accuracy, self.current_round)
+        self.writer.add_scalar('Validation_Loss', loss, self.log_round)
+        self.writer.add_scalar('Validation_Accuracy', mean_accuracy, self.log_round)
         return loss, {'accuracy': mean_accuracy}
 
     def initialize_parameters(self, client_manager: fl.server.client_manager.ClientManager):
@@ -179,7 +186,9 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             _type_: Initial model weights, distribution and hyperparameter configurations.
         """
         serialized_idx = ndarray_to_proto(np.array([0]))
+        serialized_hyperparams = ndarray_to_proto(self.hyperparams)
         self.initial_parameters.tensors.append(serialized_idx.ndarray)
+        self.initial_parameters.tensors.append(serialized_hyperparams.ndarray)
         return self.initial_parameters
 
     def set_parameters(self, parameters):
@@ -191,8 +200,8 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         """
         Computes the average gains/progress the model made during the last fit-call.
         Each client computes its validation loss before and after a backpop-step.
-        The difference before - after is averaged and we compute (avg_before - avg_after) - hyperparam_agnostic_gain_history.
-        The hyperparam_agnostic_gain_history is a discounted mean telling us how much gain we have obtained in the last
+        The difference before - after is averaged and we compute (avg_before - avg_after) - gain_history.
+        The gain_history is a discounted mean telling us how much gain we have obtained in the last
         rounds. If we obtain a better gain than in history, we will emphasize the corresponding
         hyperparameter-configurations in the distribution, if not these configurations get less
         likely to be sampled in the next round.
@@ -210,7 +219,24 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         # compute (avg_before - avg_after)
         avg_gains = np.array([w * (a - b) for w, a, b in zip(weights, after_losses, before_losses)]).sum()
         self.gain_history.append([hidxs[0], avg_gains])
+    
+    def update_distribution(self, gains, weights):
+        """
+        Update the distribution over the hyperparameter-search space.
+        First, an exponantiated "gradient" update is made based on the gains we obtained.
+        As a following step, we bound the maximum probability to be epsilon.
+        Those configurations which have probability > epsilon after the exponantiated gradient step,
+        are re-weighted such that near configurations are emphasized as well.
+        NOTE: This re-weighting constraints our hyperparameter-search space to parameters on which an order can be defined.
 
+        Args:
+            gains (_type_): Gains obtained in last round
+            weights (_type_): Weights of clients
+        """
+        denom = 1.0 if np.all(gains == 0.0) else norm(gains, float('inf'))
+        self.log_distribution -= self.eta / denom * gains
+        self.log_distribution -= logsumexp(self.log_distribution)
+        self.distribution = np.exp(self.log_distribution)
 
     def evaluate(self, parameters: fl.common.typing.Parameters):
         params = []
@@ -219,15 +245,15 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             weight = proto_to_ndarray(pnpa)
             params.append(weight)
         self.set_parameters(params)
-        loss, accuracy = _test(self.net, self.test_loader, self.writer, self.current_round)
+        loss, accuracy = _test(self.net, self.test_loader, self.writer, self.log_round)
 
         # log metrics to tensorboard
-        self.writer.add_scalar('Test_Loss', loss, self.current_round)
-        self.writer.add_scalar('Test_Accuracy', accuracy, self.current_round)
-        log_model_weights(self.net, self.current_round, self.writer)
+        self.writer.add_scalar('Test_Loss', loss, self.log_round)
+        self.writer.add_scalar('Test_Accuracy', accuracy, self.log_round)
+        log_model_weights(self.net, self.log_round, self.writer)
 
         # persist model
-        torch.save(self.net, './models/net_round_{}'.format(self.current_round))
+        torch.save(self.net, './fedex_models/net_round_{}'.format(self.log_round))
 
         # since evaluate is the last method being called in one round, step rtpt here
         self.rtpt.step()

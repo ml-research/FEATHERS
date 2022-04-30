@@ -27,7 +27,7 @@ def start_server(beta, epsilon, eta, log_dir, rounds, reinit,
 
     # Start server
     fl.server.start_server(
-        server_address="[::]:8086",
+        server_address="[::]:8092",
         config={"num_rounds": rounds},
         strategy=strategy,
     )
