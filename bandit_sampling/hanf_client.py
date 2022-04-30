@@ -15,7 +15,7 @@ from tensorboardX import SummaryWriter
 from datetime import datetime as dt
 
 warnings.filterwarnings("ignore", category=UserWarning)
-DEVICE = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 EPOCHS = 1
 
 
@@ -67,8 +67,6 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
             super().__init__(*args, **kwargs)
             self.epoch = 0
             self.hyperparameters = Hyperparameters.instance(config.HYPERPARAM_CONFIG_NR)
-            self.epsilon = config.EPSILON
-            self.epsilon_discount = config.EPSILON_DISCOUNT
 
         def get_parameters(self):
             return [val.cpu().numpy() for _, val in darts_trainer.model.state_dict().items()]
@@ -103,19 +101,7 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
             self.set_parameters_evaluate(parameters)
             loss, accuracy = _test(darts_trainer.model, darts_trainer.valid_loader)
             return float(loss), len(test_data), {"accuracy": float(accuracy)}
-
-        def get_hyperparams(self):
-            writer.add_scalar('epsilon', self.epsilon, self.epoch)
-            explore = np.random.choice([0, 1], p=[1 - self.epsilon, self.epsilon])
-            if explore == 1:
-                hidx = np.random.randint(0, len(self.hyperparameters))
-                config = self.hyperparameters[hidx]
-            else:
-                hidx = np.argmax(self.reward_estimates)
-                config = self.hyperparameters[hidx]
-            self.epsilon = self.epsilon * self.epsilon_discount
-            return hidx, config
-
+            
     # Start client
     fl.client.start_numpy_client("[::]:{}".format(config.PORT), client=HANFClient())
 

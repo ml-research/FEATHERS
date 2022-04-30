@@ -14,6 +14,7 @@ def start_server(rounds):
         fraction_fit=0.5,
         fraction_eval=0.5,
         initial_net=net,
+        alpha=config.ALPHA,
     )
 
     # Start server

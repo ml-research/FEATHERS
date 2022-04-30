@@ -17,7 +17,7 @@ from hyperparameters import Hyperparameters
 from scipy.special import logsumexp
 from numpy.linalg import norm
 
-DEVICE = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def _test(net, testloader, writer, round):
     """Validate the network on the entire test set."""
@@ -76,13 +76,13 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.reward_estimates = np.zeros(len(self.hyperparams))
         self.alpha = alpha
         self.loss_history = []
-        self.reward_history = []
         self.discount_factor = baseline_discount
         self.gain_history = []
         self.current_config_idx = None
         self.old_weights = self.initial_parameters
         self.log_round = 0
         self.current_exploration = None
+        self.reward_history = []
 
     def aggregate_fit(
         self,
@@ -120,11 +120,10 @@ class HANFStrategy(fl.server.strategy.FedAvg):
                 self.current_exploration = self.current_exploration[:-1]
             else:
                 self.compute_gains(weights, results)
+                self.update_rewards()
                 self.current_exploration = None
                 self.current_round += 1
-                last_gains = np.array(self.gain_history)
-                max_gain_idx = np.argmin(last_gains[:,1])
-                self.current_config_idx = int(last_gains[max_gain_idx, 0])
+                self.current_config_idx = int(np.argmax(self.reward_estimates))
                 self.gain_history = []
         else:
             self.current_round += 1
@@ -132,7 +131,8 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             self.old_weights = aggregated_weights
         
         # sample hyperparameters and append them to the parameters
-        print(self.current_config_idx)
+        print('Current configuration: ')
+        print(self.hyperparams[self.current_config_idx])
         serialized_idx = ndarray_to_proto(np.array([self.current_config_idx]))
         aggregated_weights.tensors.append(serialized_idx.ndarray)
 
@@ -187,6 +187,18 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
         self.net.load_state_dict(state_dict, strict=True)
 
+    def update_rewards(self):
+        # log rewards
+        self.reward_history.append(self.reward_estimates)
+        rh = np.array(self.reward_history)
+        df = pd.DataFrame(rh)
+        df.to_csv('./hyperparam-logs/rewards_{}'.format(self.date))
+
+        rewards = np.zeros(len(self.hyperparams))
+        for idx, gain in self.gain_history:
+            rewards[idx] = gain
+        self.reward_estimates += self.alpha * (rewards - self.reward_estimates)
+
     def compute_gains(self, weights, results):
         """
         Computes the average gains/progress the model made during the last fit-call.
@@ -207,9 +219,10 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         after_losses = [res.metrics['after'] for _, res in results]
         before_losses = [res.metrics['before'] for _, res in results]
         hidxs = [res.metrics['hidx'] for _, res in results]
+        config_idx = hidxs[0]
         # compute (avg_before - avg_after)
-        avg_gains = np.array([w * (a - b) for w, a, b in zip(weights, after_losses, before_losses)]).sum()
-        self.gain_history.append([hidxs[0], avg_gains])
+        avg_gains = np.array([-w * (a - b) for w, a, b in zip(weights, after_losses, before_losses)]).sum()
+        self.gain_history.append([config_idx, avg_gains])
 
 
     def evaluate(self, parameters: fl.common.typing.Parameters):

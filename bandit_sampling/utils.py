@@ -56,7 +56,7 @@ class CIFAR10Loader:
         """
         Loads the Fashion-MNIST dataset
         """
-        transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize(0, 1)])
+        transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize((0,), (1,))])
         train_data = torchvision.datasets.CIFAR10('../../../datasets/cifar10/', download=True, train=True, transform=transform)
         val_data = torchvision.datasets.CIFAR10('../../../datasets/cifar10/', download=True, train=False, transform=transform)
         self.train_partitions, self.val_partitions, self.test_set = partition_data(train_data, val_data, self.n_clients)
