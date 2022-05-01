@@ -1,5 +1,5 @@
 # hyperparameter configuration parameters
-ROUNDS = 110 # nr. of communication rounds
+ROUNDS = 120 # nr. of communication rounds
 ALPHA = 0.6
 HYPERPARAM_CONFIG_NR = 40 # size of hyperparameter search space
 

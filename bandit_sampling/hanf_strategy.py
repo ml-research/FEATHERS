@@ -4,6 +4,8 @@ import flwr as fl
 import numpy as np
 import pandas as pd
 from numproto import proto_to_ndarray, ndarray_to_proto
+from scipy.special import softmax
+from scipy.stats import entropy
 from helpers import ProtobufNumpyArray, log_model_weights, log_hyper_config, log_hyper_params
 from utils import discounted_mean, get_dataset_loder
 from collections import OrderedDict
@@ -14,10 +16,8 @@ from rtpt import RTPT
 from datetime import datetime as dt
 import config
 from hyperparameters import Hyperparameters
-from scipy.special import logsumexp
-from numpy.linalg import norm
 
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
 
 def _test(net, testloader, writer, round):
     """Validate the network on the entire test set."""
@@ -43,7 +43,8 @@ def _test(net, testloader, writer, round):
 class HANFStrategy(fl.server.strategy.FedAvg):
 
     def __init__(self, fraction_fit, fraction_eval, initial_net, 
-                log_dir='./runs/', use_gain_avg=False, alpha=0.1, baseline_discount=0.9, **args) -> None:
+                log_dir='./runs/', use_gain_avg=False, alpha=0.1, baseline_discount=0.9, gamma=4,
+                exploration_mode='greedy', **args) -> None:
         """
         Intitialize the HANF strategy used by flwr to aggregation of model parameters.
 
@@ -82,6 +83,9 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.old_weights = self.initial_parameters
         self.log_round = 0
         self.current_exploration = None
+        self.gamma = gamma
+        self.exploration_mode = exploration_mode
+        self.exploration_steps = 0
         self.reward_history = []
 
     def aggregate_fit(
@@ -114,7 +118,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             if self.current_exploration is None:
                 self._sample_hyperparams()
             if len(self.current_exploration) > 0:
-                if len(self.current_exploration) < 10:
+                if len(self.current_exploration) < self.exploration_steps:
                     self.compute_gains(weights, results)
                 self.current_config_idx = int(self.current_exploration[-1])
                 self.current_exploration = self.current_exploration[:-1]
@@ -141,8 +145,19 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         return aggregated_weights, {}
 
     def _sample_hyperparams(self):
-        # obtain new learning rate for this batch
-        self.current_exploration = np.random.randint(0, len(self.hyperparams), 10)
+        # obtain new hyperparameter configuration
+        if not np.all(self.reward_estimates == 0):
+            normed_rewards = self.reward_estimates / np.linalg.norm(self.reward_estimates, float('inf'))
+        else:
+            normed_rewards = self.reward_estimates
+        dist = softmax(normed_rewards)
+        config_inds = np.arange(0, len(self.hyperparams))
+        self.exploration_steps = int(np.round(self.gamma * entropy(dist), 0))
+        print('Exploring for {} rounds'.format(self.exploration_steps))
+        if self.exploration_mode == 'greedy':
+            self.current_exploration = np.random.choice(config_inds, self.exploration_steps, p=dist)
+        elif self.exploration_mode == 'random':
+            self.current_exploration = np.random.randint(0, len(self.hyperparams), self.exploration_steps)
 
     def aggregate_evaluate(self, rnd: int, results, failures):
         """
@@ -192,12 +207,15 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.reward_history.append(self.reward_estimates)
         rh = np.array(self.reward_history)
         df = pd.DataFrame(rh)
-        df.to_csv('./hyperparam-logs/rewards_{}'.format(self.date))
+        df.to_csv('./hyperparam-logs/rewards_{}.csv'.format(self.date))
 
         rewards = np.zeros(len(self.hyperparams))
         for idx, gain in self.gain_history:
             rewards[idx] = gain
-        self.reward_estimates += self.alpha * (rewards - self.reward_estimates)
+        sampled_inds = [i for i, _ in self.gain_history]
+        mask = np.zeros(len(self.reward_estimates))
+        mask[sampled_inds] = 1
+        self.reward_estimates += (mask * self.alpha * (rewards - self.reward_estimates)) + ((1 - mask ) * self.alpha * self.reward_estimates)
 
     def compute_gains(self, weights, results):
         """

@@ -15,7 +15,7 @@ from tensorboardX import SummaryWriter
 from datetime import datetime as dt
 
 warnings.filterwarnings("ignore", category=UserWarning)
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
 EPOCHS = 1
 
 
