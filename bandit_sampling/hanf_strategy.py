@@ -221,7 +221,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         print(rewards)
         print("Old rewards:")
         print(np.round(self.reward_estimates, 2))
-        self.reward_estimates += (mask * self.alpha * (rewards - self.reward_estimates)) + ((1 - mask ) * self.alpha * self.reward_estimates)
+        self.reward_estimates += (mask * self.alpha * (rewards - self.reward_estimates)) + ((1 - mask ) * -self.reward_estimates + (1 - mask) * self.alpha * self.reward_estimates)
         print("New rewards:")
         print(np.round(self.reward_estimates, 2))
 
