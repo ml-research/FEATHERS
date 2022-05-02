@@ -43,7 +43,7 @@ def _test(net, testloader, writer, round):
 class HANFStrategy(fl.server.strategy.FedAvg):
 
     def __init__(self, fraction_fit, fraction_eval, initial_net, 
-                log_dir='./runs/', use_gain_avg=False, alpha=0.1, baseline_discount=0.9, gamma=4,
+                log_dir='./runs/', alpha=0.1, baseline_discount=0.9, gamma=4,
                 exploration_mode='greedy', **args) -> None:
         """
         Intitialize the HANF strategy used by flwr to aggregation of model parameters.
@@ -62,7 +62,6 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.hyperparams = Hyperparameters.instance(config.HYPERPARAM_CONFIG_NR)
         self.date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
         log_hyper_params(self.hyperparams.to_dict(), 'hyperparam-logs/hyperparameters_{}.json'.format(self.date))
-        self.use_gain_avg = use_gain_avg
         self.net = initial_net
         self.net.to(DEVICE)
         initial_params = [param.cpu().detach().numpy() for _, param in self.net.state_dict().items()]
@@ -152,7 +151,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             normed_rewards = self.reward_estimates
         dist = softmax(normed_rewards)
         config_inds = np.arange(0, len(self.hyperparams))
-        self.exploration_steps = int(np.round(self.gamma * entropy(dist), 0))
+        self.exploration_steps = 1 #int(np.round(self.gamma * entropy(dist), 0))
         print('Exploring for {} rounds'.format(self.exploration_steps))
         if self.exploration_mode == 'greedy':
             self.current_exploration = np.random.choice(config_inds, self.exploration_steps, p=dist)
