@@ -8,9 +8,9 @@ LOG_DIR = './runs/'
 
 # server parameters
 DATASET = 'fmnist' # dataset to use. Alternatives: cifar10
-CLIENT_NR = 10
-MIN_TRAIN_CLIENTS = 5 # min. number of clients used during fit
-MIN_VAL_CLIENTS = 5 # min. number of clients used during evaluation
+CLIENT_NR = 2
+MIN_TRAIN_CLIENTS = 2 # min. number of clients used during fit
+MIN_VAL_CLIENTS = 2 # min. number of clients used during evaluation
 REINIT = False # reinitailize model if no improvement was made
 
 # model initilization parameters
@@ -21,4 +21,4 @@ OUT_CHANNELS = 16 # number of output-channels
 NODE_NR = 8 # number of nodes per cell
 
 PORT = '8080'
-GPUS = [1, 2, 3, 4, 5] # GPUs to use
+GPUS = [3] # GPUs to use

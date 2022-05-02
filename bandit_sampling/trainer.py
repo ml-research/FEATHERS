@@ -25,7 +25,7 @@ class DartsTrainer:
         self.writer = SummaryWriter("./runs/Client_{}".format(date)) if writer is None else writer
         
         self.ctrl_optim = torch.optim.Adam(self.model.arch_parameters(), arc_learning_rate, betas=(0.5, 0.999),
-                                           weight_decay=1.0E-5)
+                                           weight_decay=3e-4)
         #self.ctrl_optim = torch.optim.SGD(self.model.arch_parameters(), arc_learning_rate, 0.9)
         self.second_order_optim = second_order_optim
 

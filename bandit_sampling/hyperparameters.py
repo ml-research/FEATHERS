@@ -8,7 +8,7 @@ class Hyperparameters:
         if Hyperparameters._instance is not None:
             raise RuntimeError("Hyperparameters is a singleton, use instance()")
         self.sample_hyperparams = lambda: {
-            'learning_rate': 10 ** (np.random.uniform(-4, 0))
+            'learning_rate': 10 ** (np.random.uniform(-4, -2))
         }
         self.hyperparams = [self.sample_hyperparams() for _ in range(nr_configs)]
         
