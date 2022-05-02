@@ -13,13 +13,13 @@ import config
 from hyperparameters import Hyperparameters
 from tensorboardX import SummaryWriter
 from datetime import datetime as dt
+import argparse
 
 warnings.filterwarnings("ignore", category=UserWarning)
-DEVICE = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
 EPOCHS = 1
 
 
-def _test(net, testloader):
+def _test(net, testloader, device):
     """Validate the network on the entire test set."""
     criterion = torch.nn.CrossEntropyLoss()
     correct, total, loss = 0, 0, 0.0
@@ -28,7 +28,7 @@ def _test(net, testloader):
         for feats, labels in testloader:
             #feats = feats.type(torch.FloatTensor)
             #labels = labels.type(torch.LongTensor)
-            feats, labels = feats.to(DEVICE), labels.to(DEVICE)
+            feats, labels = feats.to(device), labels.to(device)
             preds = net(feats)
             loss += criterion(preds, labels).item()
             _, predicted = torch.max(preds.data, 1)
@@ -42,13 +42,13 @@ def _test(net, testloader):
 # 2. Federation of the pipeline with Flower
 # #############################################################################
 
-def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_channels=16, node_nr=7):
+def main(dataset, num_clients, device, classes=10, cell_nr=4, input_channels=1, out_channels=16, node_nr=7):
     """Create model, load data, define Flower client, start Flower client."""
 
     # Load model
     criterion = nn.CrossEntropyLoss()
     net = Classifier(classes, criterion, cell_nr, input_channels, out_channels, node_nr)
-    net.to(DEVICE)
+    net.to(device)
 
     # Load data
     fashion_mnist_iterator = get_dataset_loder(dataset, num_clients)
@@ -56,7 +56,7 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
     date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
     writer = SummaryWriter("./runs/Client_{}".format(date))
     darts_trainer = DartsTrainer(net, criterion, train_data, test_data, second_order_optim=True, 
-                                device=DEVICE, batch_size=64, writer=writer)
+                                device=device, batch_size=64, writer=writer)
     rtpt = RTPT('JS', 'HANF_Client', EPOCHS)
     rtpt.start()
 
@@ -99,7 +99,7 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
 
         def evaluate(self, parameters, config):
             self.set_parameters_evaluate(parameters)
-            loss, accuracy = _test(darts_trainer.model, darts_trainer.valid_loader)
+            loss, accuracy = _test(darts_trainer.model, darts_trainer.valid_loader, device)
             return float(loss), len(test_data), {"accuracy": float(accuracy)}
             
     # Start client
@@ -107,5 +107,10 @@ def main(dataset, num_clients, classes=10, cell_nr=4, input_channels=1, out_chan
 
 
 if __name__ == "__main__":
-    main(config.DATASET, config.CLIENT_NR, config.CLASSES, config.CELL_NR, 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--gpu', default='0', type=str)
+
+    args = parser.parse_args()
+    device = torch.device('cuda:{}'.format(args.gpu))
+    main(config.DATASET, config.CLIENT_NR, device, config.CLASSES, config.CELL_NR, 
         config.IN_CHANNELS, config.OUT_CHANNELS, config.NODE_NR)

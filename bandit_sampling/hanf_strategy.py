@@ -17,7 +17,7 @@ from datetime import datetime as dt
 import config
 from hyperparameters import Hyperparameters
 
-DEVICE = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def _test(net, testloader, writer, round):
     """Validate the network on the entire test set."""
@@ -158,6 +158,8 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             self.current_exploration = np.random.choice(config_inds, self.exploration_steps, p=dist)
         elif self.exploration_mode == 'random':
             self.current_exploration = np.random.randint(0, len(self.hyperparams), self.exploration_steps)
+        print("Checking:")
+        print(self.current_exploration)
 
     def aggregate_evaluate(self, rnd: int, results, failures):
         """
@@ -215,7 +217,13 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         sampled_inds = [i for i, _ in self.gain_history]
         mask = np.zeros(len(self.reward_estimates))
         mask[sampled_inds] = 1
+        print("Gains:")
+        print(rewards)
+        print("Old rewards:")
+        print(np.round(self.reward_estimates, 2))
         self.reward_estimates += (mask * self.alpha * (rewards - self.reward_estimates)) + ((1 - mask ) * self.alpha * self.reward_estimates)
+        print("New rewards:")
+        print(np.round(self.reward_estimates, 2))
 
     def compute_gains(self, weights, results):
         """

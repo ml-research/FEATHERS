@@ -13,13 +13,17 @@ warnings.filterwarnings('error')
 
 class DartsTrainer:
     def __init__(self, model, loss, dataset_train, dataset_valid,
-                 batch_size=64, device=None, arc_learning_rate=3.0E-4, second_order_optim=False):
+                 batch_size=64, device=None, arc_learning_rate=3.0E-4, second_order_optim=False,
+                 weight_decay=3e-4, mlr=0.025, momentum=0.9):
 
         self.device = device if device is not None else torch.device("cpu")
         self.model = model
         self.loss = loss
         self.dataset_train = dataset_train
         self.dataset_valid = dataset_valid
+        self.weight_decay = weight_decay
+        self.mlr = mlr
+        self.optimizer = torch.optim.SGD(self.model.parameters(), mlr, weight_decay=weight_decay, momentum=momentum)
         date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
         self.writer = SummaryWriter("./runs/Client_{}".format(date))
         
@@ -37,16 +41,8 @@ class DartsTrainer:
                                         pin_memory=True,
                                         num_workers=2)
 
-    def set_hyperparameter_configs(self, hyperparams):
-        self.hyper_param_configs = hyperparams
-        self.hyper_distribution = 1 / np.repeat(len(hyperparams), len(hyperparams))
 
-    def set_hyperparameter_distribution(self, distribution):
-        self.hyper_distribution = distribution
-    
     def train_one_epoch(self, epoch):
-        hyp_config, hyp_idx = self._sample_hyperparams()
-        self.optimizer = torch.optim.SGD(self.model.parameters(), hyp_config, 0.9, weight_decay=0)
         self.model.train()
         running_val_loss, running_train_loss = 0, 0
 
@@ -92,7 +88,7 @@ class DartsTrainer:
         # collect loss after update
         after_loss = self.validate_one_epoch(epoch)
 
-        return hyp_config, hyp_idx, before_loss.item(), after_loss.item()
+        return before_loss.item(), after_loss.item()
 
     def validate_one_epoch(self, epoch):
         self.model.eval()

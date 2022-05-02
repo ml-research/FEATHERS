@@ -19,9 +19,6 @@ def log_hyper_params(hyper_param_dict):
         json.dump(to_be_persisted, f)
 
 def compute_accuracy(logits, y):
-    logits = torch.cat(logits)
-    y = torch.cat(y)
-
     y_pred = F.softmax(logits, dim=1)
     y_pred = torch.argmax(y_pred, dim=1)
 
