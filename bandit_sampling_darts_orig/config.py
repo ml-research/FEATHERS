@@ -1,6 +1,6 @@
 # hyperparameter configuration parameters
 ROUNDS = 120 # nr. of communication rounds
-ALPHA = 0.8
+ALPHA = 0.3
 HYPERPARAM_CONFIG_NR = 40 # size of hyperparameter search space
 
 # logging
@@ -8,7 +8,7 @@ LOG_DIR = './runs/'
 
 # server parameters
 DATASET = 'cifar10' # dataset to use. Alternatives: cifar10
-CLIENT_NR = 4
+CLIENT_NR = 2
 MIN_TRAIN_CLIENTS = 2 # min. number of clients used during fit
 MIN_VAL_CLIENTS = 2 # min. number of clients used during evaluation
 REINIT = False # reinitailize model if no improvement was made
@@ -21,5 +21,5 @@ OUT_CHANNELS = 16 # number of output-channels
 NODE_NR = 8 # number of nodes per cell
 
 PORT = '8080'
-GPUS = [1, 2] # GPUs to use
-SERVER_GPU = 0
+GPUS = [12, 13] # GPUs to use
+SERVER_GPU = 15

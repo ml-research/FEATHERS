@@ -16,6 +16,9 @@ from rtpt import RTPT
 from datetime import datetime as dt
 import config
 from hyperparameters import Hyperparameters
+import logging
+import os
+import sys
 
 DEVICE = torch.device("cuda:{}".format(str(config.SERVER_GPU)) if torch.cuda.is_available() else "cpu")
 
@@ -87,6 +90,16 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.exploration_mode = exploration_mode
         self.exploration_steps = 0
         self.reward_history = []
+
+        # logging
+        self.log_format = '%(asctime)s %(message)s'
+        logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+        format=self.log_format, datefmt='%m/%d %I:%M:%S %p')
+        if not os.path.exists('./models/run_{}'.format(self.date)):
+            os.mkdir('./models/run_{}'.format(self.date))
+        fh = logging.FileHandler(os.path.join('./models/run_{}'.format(self.date), 'log.txt'))
+        fh.setFormatter(logging.Formatter(self.log_format))
+        logging.getLogger().addHandler(fh)
 
     def aggregate_fit(
         self,
@@ -267,6 +280,10 @@ class HANFStrategy(fl.server.strategy.FedAvg):
 
         # persist model
         torch.save(self.net, './models/net_round_{}'.format(self.current_round))
+
+        # log current genotype
+        genotype = self.net.genotype()
+        logging.info('genotype = %s', genotype)
 
         # since evaluate is the last method being called in one round, step rtpt here
         self.rtpt.step()

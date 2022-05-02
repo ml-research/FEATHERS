@@ -9,8 +9,6 @@ from torch.utils.data import DataLoader
 from torch.autograd import Variable
 import numpy as np
 from utils import get_dataset_loder
-from model import Classifier
-from trainer import DartsTrainer
 from rtpt import RTPT
 import config
 from hyperparameters import Hyperparameters
@@ -46,25 +44,27 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, 
 
   for step, (input, target) in enumerate(train_queue):
     model.train()
-    n = input.size(0)
 
-    input = Variable(input, requires_grad=False).to(device)
-    target = Variable(target, requires_grad=False).to(device)
+    input = input.to(device, non_blocking=True)
+    target = target.to(device, non_blocking=True)
 
     # get a random minibatch from the search queue with replacement
     input_search, target_search = next(iter(valid_queue))
-    input_search = Variable(input_search, requires_grad=False).to(device)
-    target_search = Variable(target_search, requires_grad=False).to(device)
+    input_search = input_search.to(device, non_blocking=True)
+    target_search = target_search.to(device, non_blocking=True)
 
-    architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=True)
+    architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=False)
 
     optimizer.zero_grad()
     logits = model(input)
     loss = criterion(logits, target)
 
     loss.backward()
-    nn.utils.clip_grad_norm(model.parameters(), args.grad_clip)
+    nn.utils.clip_grad_norm(model.parameters(), 5.)
     optimizer.step()
+
+    if step % 50 == 0:
+        print("Step %03d" % step)
   
   return model
 
@@ -75,18 +75,11 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, 
 def main(dataset, num_clients, device, classes=10, cell_nr=4, input_channels=1, out_channels=16, node_nr=7):
     """Create model, load data, define Flower client, start Flower client."""
 
-    # Load model
-    criterion = nn.CrossEntropyLoss()
-    net = Classifier(classes, criterion, cell_nr, input_channels, out_channels, node_nr)
-    net.to(device)
-
     # Load data
     fashion_mnist_iterator = get_dataset_loder(dataset, num_clients)
     train_data, test_data = next(fashion_mnist_iterator.get_client_data())
     date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
     writer = SummaryWriter("./runs/Client_{}".format(date))
-    darts_trainer = DartsTrainer(net, criterion, train_data, test_data, second_order_optim=True, 
-                                device=device, batch_size=64, writer=writer)
     rtpt = RTPT('JS', 'HANF_Client', EPOCHS)
     rtpt.start()
 
@@ -104,7 +97,7 @@ def main(dataset, num_clients, device, classes=10, cell_nr=4, input_channels=1, 
             self.optimizer = torch.optim.SGD(self.model.parameters(), 0.01, 0.9, 3e-4)
             self.train_loader = DataLoader(train_data, 64, pin_memory=True, num_workers=2)
             self.val_loader = DataLoader(test_data, 64, pin_memory=True, num_workers=2)
-            self.architect = Architect(self.model, 0.9, 3e-4, 3e-4, 1e-3)
+            self.architect = Architect(self.model, 0.9, 3e-4, 3e-4, 1e-3, device)
 
         def get_parameters(self):
             return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
@@ -129,19 +122,20 @@ def main(dataset, num_clients, device, classes=10, cell_nr=4, input_channels=1, 
 
         def fit(self, parameters, config):
             self.set_parameters_train(parameters, config)
-            before_loss = _test(self.model, self.val_loader, device)
+            before_loss, _ = _test(self.model, self.val_loader, device)
             for e in range(EPOCHS):
                 rtpt.step()
                 self.epoch += 1
                 self.model = train(self.train_loader, self.val_loader, self.model,
-                                                 self.architect, self.criterion, self.optimizer, self.hyperparam_config['learning_rate'])
-            after_loss = _test(self.model, self.val_loader, device)
+                                                 self.architect, self.criterion, self.optimizer, 
+                                                 self.hyperparam_config['learning_rate'], device)
+            after_loss, _ = _test(self.model, self.val_loader, device)
             model_params = self.get_parameters()
             return model_params, len(train_data), {'hidx': int(self.hidx), 'before': float(before_loss), 'after': float(after_loss)}
 
         def evaluate(self, parameters, config):
             self.set_parameters_evaluate(parameters)
-            loss, accuracy = _test(self.model, darts_trainer.valid_loader, device)
+            loss, accuracy = _test(self.model, self.val_loader, device)
             return float(loss), len(test_data), {"accuracy": float(accuracy)}
 
         def set_current_hyperparameter_config(self, hyperparam, idx):
