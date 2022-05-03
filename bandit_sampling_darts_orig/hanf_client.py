@@ -92,7 +92,7 @@ def main(dataset, num_clients, device, classes=10, cell_nr=4, input_channels=1, 
             self.hyperparameters = Hyperparameters.instance(config.HYPERPARAM_CONFIG_NR)
             self.criterion = torch.nn.CrossEntropyLoss()
             self.criterion = self.criterion.to(device)
-            self.model = Network(out_channels, classes, cell_nr, self.criterion, device)
+            self.model = Network(out_channels, classes, cell_nr, self.criterion, device, in_channels=input_channels)
             self.model = self.model.to(device)
             self.optimizer = torch.optim.SGD(self.model.parameters(), 0.01, 0.9, 3e-4)
             self.train_loader = DataLoader(train_data, 64, pin_memory=True, num_workers=2)

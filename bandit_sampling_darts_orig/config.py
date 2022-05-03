@@ -20,6 +20,6 @@ IN_CHANNELS = 3 # mumber of input-channels (e.g. 3 for rgb-images)
 OUT_CHANNELS = 16 # number of output-channels
 NODE_NR = 8 # number of nodes per cell
 
-PORT = '8081'
-GPUS = [12, 13] # GPUs to use
-SERVER_GPU = 5
+PORT = '8082'
+GPUS = [4, 7] # GPUs to use
+SERVER_GPU = 4

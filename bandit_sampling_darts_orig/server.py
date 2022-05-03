@@ -8,7 +8,7 @@ import config
 def start_server(rounds):
     device = torch.device('cuda:{}'.format(str(config.SERVER_GPU))) 
     criterion = nn.CrossEntropyLoss()
-    net = Network(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, criterion, device)
+    net = Network(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, criterion, device, in_channels=config.IN_CHANNELS)
 
     # Define strategy
     strategy = HANFStrategy(
