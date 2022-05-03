@@ -4,11 +4,15 @@ import torch.nn as nn
 import torch
 from model_search import Network
 import config
+from helpers import prepare_log_dirs
 
 def start_server(rounds):
     device = torch.device('cuda:{}'.format(str(config.SERVER_GPU))) 
     criterion = nn.CrossEntropyLoss()
     net = Network(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, criterion, device, in_channels=config.IN_CHANNELS)
+
+    # prepare log-directories
+    prepare_log_dirs()
 
     # Define strategy
     strategy = HANFStrategy(
