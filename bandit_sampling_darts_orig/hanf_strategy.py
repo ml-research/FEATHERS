@@ -47,7 +47,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
 
     def __init__(self, fraction_fit, fraction_eval, initial_net, 
                 log_dir='./runs/', use_gain_avg=False, alpha=0.1, baseline_discount=0.9, gamma=4,
-                exploration_mode='greedy', **args) -> None:
+                exploration_mode='greedy', stage='search', **args) -> None:
         """
         Intitialize the HANF strategy used by flwr to aggregation of model parameters.
 
@@ -74,7 +74,8 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.test_data = dataset_iterator.get_test()
         self.test_loader = DataLoader(self.test_data, batch_size=64, pin_memory=True, num_workers=2)
         self.current_round = 0
-        self.writer = SummaryWriter(log_dir + 'Server_{}'.format(self.date))
+        tb_log_prefix = 'Server_{}' if stage == 'search' else 'Server_valid_{}'
+        self.writer = SummaryWriter(log_dir + tb_log_prefix.format(self.date))
         self.rtpt = RTPT('JS', 'HANF_Server', config.ROUNDS)
         self.rtpt.start()
         self.reward_estimates = np.zeros(len(self.hyperparams))
@@ -90,14 +91,16 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.exploration_mode = exploration_mode
         self.exploration_steps = 0
         self.reward_history = []
+        self.stage = stage
 
-        # logging
+        # logging (also logs genotypes)
         self.log_format = '%(asctime)s %(message)s'
         logging.basicConfig(stream=sys.stdout, level=logging.INFO,
         format=self.log_format, datefmt='%m/%d %I:%M:%S %p')
-        if not os.path.exists('./models/run_{}'.format(self.date)):
-            os.mkdir('./models/run_{}'.format(self.date))
-        fh = logging.FileHandler(os.path.join('./models/run_{}'.format(self.date), 'log.txt'))
+        log_prefix = 'run_{}' if stage == 'search' else 'run_valid_{}'
+        if not os.path.exists('./models/' + log_prefix.format(self.date)):
+            os.mkdir('./models/' + log_prefix.format(self.date))
+        fh = logging.FileHandler(os.path.join('./models/' + log_prefix.format(self.date), 'log.txt'))
         fh.setFormatter(logging.Formatter(self.log_format))
         logging.getLogger().addHandler(fh)
 
@@ -271,6 +274,8 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             weight = proto_to_ndarray(pnpa)
             params.append(weight)
         self.set_parameters(params)
+        if self.stage == 'valid':
+            self.net.drop_path_prob = config.DROP_PATH_PROB * self.current_round / config.ROUNDS
         loss, accuracy = _test(self.net, self.test_loader, self.writer, self.current_round)
 
         # log metrics to tensorboard
@@ -281,9 +286,10 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         # persist model
         torch.save(self.net, './models/net_round_{}'.format(self.current_round))
 
-        # log current genotype
-        genotype = self.net.genotype()
-        logging.info('genotype = %s', genotype)
+        # log current genotype if we are in architecture search phase
+        if self.stage == 'search':
+            genotype = self.net.genotype()
+            logging.info('genotype = %s', genotype)
 
         # since evaluate is the last method being called in one round, step rtpt here
         self.rtpt.step()
