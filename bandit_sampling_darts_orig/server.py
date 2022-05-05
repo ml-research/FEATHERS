@@ -20,6 +20,9 @@ def start_server(rounds):
         fraction_eval=0.5,
         initial_net=net,
         alpha=config.ALPHA,
+        min_fit_clients=config.MIN_TRAIN_CLIENTS,
+        min_eval_clients=config.MIN_VAL_CLIENTS,
+        min_available_clients=config.CLIENT_NR,
         stage='search',
     )
 
