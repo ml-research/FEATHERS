@@ -151,8 +151,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             self.old_weights = aggregated_weights
         
         # sample hyperparameters and append them to the parameters
-        print('Current configuration: ')
-        print(self.hyperparams[self.current_config_idx])
+        logging.info('hyperparam_configuration = %s', self.hyperparams[self.current_config_idx])
         serialized_idx = ndarray_to_proto(np.array([self.current_config_idx]))
         aggregated_weights.tensors.append(serialized_idx.ndarray)
 
