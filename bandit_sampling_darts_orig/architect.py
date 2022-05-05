@@ -92,3 +92,10 @@ class Architect(object):
 
     return [(x-y).div_(2*R) for x, y in zip(grads_p, grads_n)]
 
+  def update_hyperparameters(self, hyperparams):
+    for g in self.optimizer.param_groups:
+      g['lr'] = hyperparams['arch_learning_rate']
+      g['weight_decay'] = hyperparams['arch_weight_decay']
+
+    self.network_momentum = hyperparams['momentum']
+    self.network_weight_decay = hyperparams['weight_decay']

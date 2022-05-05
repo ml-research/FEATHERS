@@ -142,10 +142,17 @@ def main(dataset, num_clients, device, classes=10, cell_nr=4, input_channels=1, 
             self.hyperparam_config = hyperparam
             self.hidx = idx
             if self.optimizer is None:
-                self.optimizer = torch.optim.SGD(self.model.parameters(), self.hyperparam_config['learning_rate'], 0.9, weight_decay=3e-4)
+                self.optimizer = torch.optim.SGD(self.model.parameters(), self.hyperparam_config['learning_rate'], 
+                                                momentum=self.hyperparam_config['momentum'], weight_decay=self.hyperparam_config['weight_decay'])
             else:
                 for g in self.optimizer.param_groups:
                     g['lr'] = self.hyperparam_config['learning_rate']
+                    g['momentum'] = self.hyperparam_config['momentum']
+                    g['weight_decay'] = self.hyperparam_config['weight_decay']
+
+            # update architect's hyperparameters
+            self.architect.update_hyperparameters(hyperparam)
+
             
     # Start client
     fl.client.start_numpy_client("[::]:{}".format(config.PORT), client=HANFClient())

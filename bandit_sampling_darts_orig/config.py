@@ -1,7 +1,7 @@
 # hyperparameter configuration parameters
 ROUNDS = 120 # nr. of communication rounds
 ALPHA = 0.3
-HYPERPARAM_CONFIG_NR = 40 # size of hyperparameter search space
+HYPERPARAM_CONFIG_NR = 120 # size of hyperparameter search space
 
 # logging
 LOG_DIR = './runs/'
