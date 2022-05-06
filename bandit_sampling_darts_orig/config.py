@@ -15,14 +15,14 @@ REINIT = False # reinitailize model if no improvement was made
 
 # model initilization parameters
 CLASSES = 10 # number of output-classes
-CELL_NR = 7 # number of cells the search space consists of
+CELL_NR = 8 # number of cells the search space consists of
 IN_CHANNELS = 1 # mumber of input-channels (e.g. 3 for rgb-images)
 OUT_CHANNELS = 16 # number of output-channels
-NODE_NR = 8 # number of nodes per cell
+NODE_NR = 7 # number of nodes per cell
 
 PORT = '8085'
 GPUS = [5, 6] # GPUs to use
-SERVER_GPU = 2
+SERVER_GPU = 5
 
 # validation stage
 DROP_PATH_PROB = 0.2 # probability of dropping a path in cell, similar to dropout
