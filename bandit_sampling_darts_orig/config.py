@@ -20,9 +20,9 @@ IN_CHANNELS = 1 # mumber of input-channels (e.g. 3 for rgb-images)
 OUT_CHANNELS = 16 # number of output-channels
 NODE_NR = 7 # number of nodes per cell
 
-PORT = '8085'
-GPUS = [5, 6] # GPUs to use
-SERVER_GPU = 5
+PORT = '8083'
+GPUS = [2, 4, 6] # GPUs to use
+SERVER_GPU = 0
 
 # validation stage
 DROP_PATH_PROB = 0.2 # probability of dropping a path in cell, similar to dropout

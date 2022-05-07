@@ -11,7 +11,7 @@ class Hyperparameters:
             'learning_rate': 10 ** (np.random.uniform(-4, 0)),
             'weight_decay': 10.0 ** np.random.uniform(low=-5.0, high=-1.0),
             'momentum': np.random.uniform(low=0.0, high=1.0),
-            'arch_learning_rate': 10 ** (np.random.uniform(-5, -1)),
+            'arch_learning_rate': 10 ** (np.random.uniform(-5, -2)),
             'arch_weight_decay': 10.0 ** np.random.uniform(low=-5.0, high=-1.0),
         }
         self.hyperparams = [self.sample_hyperparams() for _ in range(nr_configs)]
