@@ -6,6 +6,7 @@ import torchvision.transforms as transforms
 from torch.autograd import Variable
 from torch.utils.data import random_split, Subset
 import torchvision
+import math
 
 class FashionMNISTLoader:
 
@@ -15,7 +16,7 @@ class FashionMNISTLoader:
         if FashionMNISTLoader._instance is not None:
             raise RuntimeError("FashionMNISTLoader is a singleton, use instance()")
         self.n_clients = n_clients
-        self._load_fmnist()
+        self._load_data()
         
     @classmethod
     def instance(cls, n_clients=2):
@@ -23,7 +24,7 @@ class FashionMNISTLoader:
             FashionMNISTLoader._instance = FashionMNISTLoader(n_clients)
         return FashionMNISTLoader._instance
 
-    def _load_fmnist(self):
+    def _load_data(self):
         """
         Loads the Fashion-MNIST dataset
         """
@@ -47,7 +48,7 @@ class CIFAR10Loader:
         if CIFAR10Loader._instance is not None:
             raise RuntimeError("CIFAR10Loader is a singleton, use instance()")
         self.n_clients = n_clients
-        self._load_fmnist()
+        self._load_data()
         
     @classmethod
     def instance(cls, n_clients=2):
@@ -55,7 +56,7 @@ class CIFAR10Loader:
             CIFAR10Loader._instance = CIFAR10Loader(n_clients)
         return CIFAR10Loader._instance
 
-    def _load_fmnist(self):
+    def _load_data(self):
         """
         Loads the Fashion-MNIST dataset
         """
@@ -96,6 +97,88 @@ def partition_data(train_set, val_set, n_clients):
     val_partitions = random_split(validation, val_lengths, generator=torch.Generator().manual_seed(42))
 
     return train_partitions, val_partitions, test
+
+def label_distribution_skew(x, y, partitions, skew=1):
+    def runner_split(N_labels, N_runners):
+        """number of labels to assign to n clients"""
+        runner_labels = round(max(1, N_labels / N_runners))
+        runner_split = round(max(1, N_runners / N_labels))
+        return runner_labels, runner_split
+
+    runn_inds = []
+    N_labels = torch.unique(y).shape[0]
+    n_labels, n_runners = runner_split(N_labels, partitions)
+    np.random.seed(42)
+    
+    selected_inds = []
+    for label_idx in range(0, N_labels, n_labels):
+        # get a range of labels (e.g. in case of MNIST labels between 0 and 3)
+        mask = torch.isin(y, torch.Tensor(np.arange(label_idx, label_idx+n_labels))).cpu().detach().numpy()
+        # get index of these labels
+        subset_idx = np.argwhere(mask)[:, 0]
+        n_samples = subset_idx.shape[0]
+        # randomly sample indices of size sample_size
+        sample_size = math.floor(skew*n_samples)
+        subset_idx = np.random.choice(subset_idx, sample_size, replace=False)
+        selected_inds += list(subset_idx)
+    
+        for partition in np.array_split(subset_idx, n_runners):
+            # add a data-partition for a runner
+            runn_inds.append(partition)
+    
+    selected = np.array(selected_inds)
+    mask = np.zeros(len(x))
+    mask[selected] = 1
+    not_selected = np.argwhere(mask == 0)
+    return runn_inds, not_selected
+
+def uniform_distribution(inds, partitions, randomise=True):
+    runner_data = []
+    if randomise:
+        # shuffle indices
+        np.random.shuffle(inds)
+    # split randomly chosen data-points and labels into partitions
+    for partition in np.array_split(inds, partitions):
+        runner_data.append(partition)
+    return runner_data
+
+def partition_skewed(train_set, val_set, partitions, randomise=True, skew=1):
+
+    # randomly select half of the data of the validation set to be the test-set
+    ind_in_val = np.random.choice([0, 1], p=[0.5, 0.5], size=len(val_set))
+    val_inds = np.argwhere(ind_in_val == 1)
+    test_inds = np.argwhere(ind_in_val == 0)
+    train_partitions, val_partitions, test_set = [], [], Subset(val_set, test_inds)
+    train_inds = np.arange(len(train_set))
+    if skew == 0:
+        train_partitions = uniform_distribution(train_inds, partitions, randomise)
+        val_partitions = uniform_distribution(val_inds, partitions, randomise)
+        for t, v in zip(train_partitions, val_partitions):
+            train_subset = Subset(train_set, t)
+            val_subset = Subset(val_set, v)
+            train_partitions.append(train_subset)
+            val_partitions.append(val_subset)
+    else:
+        # build skewed data-sets
+        train_selected, train_inds_remain = label_distribution_skew(train_set.data, train_set.targets, partitions, skew)
+        val_selected, val_inds_remain = label_distribution_skew(val_set.data, val_set.targets, partitions, skew)
+        # if skew < 1 this will contain a list of all data-points that are not already assigned to some runner
+        train_uniform = uniform_distribution(train_inds_remain, partitions, randomise)
+        val_uniform = uniform_distribution(val_inds_remain, partitions, randomise)
+        # concatenate train and val set-indices obtained above
+        for s, p in zip(train_selected, train_uniform):
+            s = s.reshape(-1, 1)
+            p = p.reshape(-1, 1)
+            indices = np.concatenate((s, p))
+            subset = Subset(train_set, indices)
+            train_partitions.append(subset)
+        for s, p in zip(val_selected, val_uniform):
+            s = s.reshape(-1, 1)
+            p = p.reshape(-1, 1)
+            indices = np.concatenate((s, p))
+            subset = Subset(val_set, indices)
+            val_partitions.append(subset)
+    return train_partitions, val_partitions, test_set
 
 def discounted_mean(series, gamma=1.0):
     weight = gamma ** np.flip(np.arange(len(series)), axis=0)
