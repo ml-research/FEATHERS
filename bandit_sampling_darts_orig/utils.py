@@ -12,16 +12,17 @@ class FashionMNISTLoader:
 
     _instance = None
 
-    def __init__(self, n_clients) -> None:
+    def __init__(self, n_clients, skew=0) -> None:
         if FashionMNISTLoader._instance is not None:
             raise RuntimeError("FashionMNISTLoader is a singleton, use instance()")
         self.n_clients = n_clients
+        self.skew = skew
         self._load_data()
         
     @classmethod
-    def instance(cls, n_clients=2):
+    def instance(cls, n_clients=2, skew=0):
         if FashionMNISTLoader._instance is None:
-            FashionMNISTLoader._instance = FashionMNISTLoader(n_clients)
+            FashionMNISTLoader._instance = FashionMNISTLoader(n_clients, skew=skew)
         return FashionMNISTLoader._instance
 
     def _load_data(self):
@@ -31,7 +32,7 @@ class FashionMNISTLoader:
         transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize((0,), (1,))])
         train_data = torchvision.datasets.FashionMNIST('../../../datasets/femnist/', download=True, train=True, transform=transform)
         val_data = torchvision.datasets.FashionMNIST('../../../datasets/femnist/', download=True, train=False, transform=transform)
-        self.train_partitions, self.val_partitions, self.test_set = partition_data(train_data, val_data, self.n_clients)
+        self.train_partitions, self.val_partitions, self.test_set = partition_skewed(train_data, val_data, self.n_clients, skew=self.skew)
         
     def get_client_data(self):
         for train, val in zip(self.train_partitions, self.val_partitions):
@@ -44,16 +45,17 @@ class CIFAR10Loader:
 
     _instance = None
 
-    def __init__(self, n_clients) -> None:
+    def __init__(self, n_clients, skew=0) -> None:
         if CIFAR10Loader._instance is not None:
             raise RuntimeError("CIFAR10Loader is a singleton, use instance()")
         self.n_clients = n_clients
+        self.skew = skew
         self._load_data()
         
     @classmethod
-    def instance(cls, n_clients=2):
+    def instance(cls, n_clients=2, skew=0):
         if CIFAR10Loader._instance is None:
-            CIFAR10Loader._instance = CIFAR10Loader(n_clients)
+            CIFAR10Loader._instance = CIFAR10Loader(n_clients, skew=skew)
         return CIFAR10Loader._instance
 
     def _load_data(self):
@@ -63,7 +65,7 @@ class CIFAR10Loader:
         transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize((0,), (1,))])
         train_data = torchvision.datasets.CIFAR10('../../../datasets/cifar10/', download=True, train=True, transform=transform)
         val_data = torchvision.datasets.CIFAR10('../../../datasets/cifar10/', download=True, train=False, transform=transform)
-        self.train_partitions, self.val_partitions, self.test_set = partition_data(train_data, val_data, self.n_clients)
+        self.train_partitions, self.val_partitions, self.test_set = partition_skewed(train_data, val_data, self.n_clients, skew=self.skew)
         
     def get_client_data(self):
         for train, val in zip(self.train_partitions, self.val_partitions):
@@ -143,7 +145,7 @@ def uniform_distribution(inds, partitions, randomise=True):
     return runner_data
 
 def partition_skewed(train_set, val_set, partitions, randomise=True, skew=1):
-
+    print(skew)
     # randomly select half of the data of the validation set to be the test-set
     ind_in_val = np.random.choice([0, 1], p=[0.5, 0.5], size=len(val_set))
     val_inds = np.argwhere(ind_in_val == 1)
@@ -151,9 +153,9 @@ def partition_skewed(train_set, val_set, partitions, randomise=True, skew=1):
     train_partitions, val_partitions, test_set = [], [], Subset(val_set, test_inds)
     train_inds = np.arange(len(train_set))
     if skew == 0:
-        train_partitions = uniform_distribution(train_inds, partitions, randomise)
-        val_partitions = uniform_distribution(val_inds, partitions, randomise)
-        for t, v in zip(train_partitions, val_partitions):
+        train_unfiorm = uniform_distribution(train_inds, partitions, randomise)
+        val_uniform = uniform_distribution(val_inds, partitions, randomise)
+        for t, v in zip(train_unfiorm, val_uniform):
             train_subset = Subset(train_set, t)
             val_subset = Subset(val_set, v)
             train_partitions.append(train_subset)
@@ -183,7 +185,6 @@ def partition_skewed(train_set, val_set, partitions, randomise=True, skew=1):
 def discounted_mean(series, gamma=1.0):
     weight = gamma ** np.flip(np.arange(len(series)), axis=0)
     return np.inner(series, weight) / weight.sum()
-
 
 class AvgrageMeter(object):
 
