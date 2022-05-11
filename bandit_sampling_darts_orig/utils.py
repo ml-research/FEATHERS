@@ -74,11 +74,11 @@ class CIFAR10Loader:
     def get_test(self):
         return self.test_set
 
-def get_dataset_loder(dataset, num_clients):
+def get_dataset_loder(dataset, num_clients, skew=0):
     if dataset == 'fmnist':
-        return FashionMNISTLoader.instance(num_clients)
+        return FashionMNISTLoader.instance(num_clients, skew=skew)
     elif dataset == 'cifar10':
-        return CIFAR10Loader.instance(num_clients)
+        return CIFAR10Loader.instance(num_clients, skew=skew)
     else:
         raise ValueError('{} is not supported'.format(dataset))
 
@@ -145,11 +145,10 @@ def uniform_distribution(inds, partitions, randomise=True):
     return runner_data
 
 def partition_skewed(train_set, val_set, partitions, randomise=True, skew=1):
-    print(skew)
     # randomly select half of the data of the validation set to be the test-set
     ind_in_val = np.random.choice([0, 1], p=[0.5, 0.5], size=len(val_set))
-    val_inds = np.argwhere(ind_in_val == 1)
-    test_inds = np.argwhere(ind_in_val == 0)
+    val_inds = np.argwhere(ind_in_val == 1).reshape(1, -1)[0]
+    test_inds = np.argwhere(ind_in_val == 0).reshape(1, -1)[0]
     train_partitions, val_partitions, test_set = [], [], Subset(val_set, test_inds)
     train_inds = np.arange(len(train_set))
     if skew == 0:
@@ -169,14 +168,14 @@ def partition_skewed(train_set, val_set, partitions, randomise=True, skew=1):
         val_uniform = uniform_distribution(val_inds_remain, partitions, randomise)
         # concatenate train and val set-indices obtained above
         for s, p in zip(train_selected, train_uniform):
-            s = s.reshape(-1, 1)
-            p = p.reshape(-1, 1)
+            s = s.reshape(1, -1)[0]
+            p = p.reshape(1, -1)[0]
             indices = np.concatenate((s, p))
             subset = Subset(train_set, indices)
             train_partitions.append(subset)
         for s, p in zip(val_selected, val_uniform):
-            s = s.reshape(-1, 1)
-            p = p.reshape(-1, 1)
+            s = s.reshape(1, -1)[0]
+            p = p.reshape(1, -1)[0]
             indices = np.concatenate((s, p))
             subset = Subset(val_set, indices)
             val_partitions.append(subset)

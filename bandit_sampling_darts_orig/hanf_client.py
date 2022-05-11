@@ -76,7 +76,7 @@ def main(dataset, num_clients, device, classes=10, cell_nr=4, input_channels=1, 
     """Create model, load data, define Flower client, start Flower client."""
 
     # Load data
-    fashion_mnist_iterator = get_dataset_loder(dataset, num_clients)
+    fashion_mnist_iterator = get_dataset_loder(dataset, num_clients, config.DATA_SKEW)
     train_data, test_data = next(fashion_mnist_iterator.get_client_data())
     date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
     writer = SummaryWriter("./runs/Client_{}".format(date))

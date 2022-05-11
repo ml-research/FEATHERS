@@ -73,7 +73,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.net.to(DEVICE)
         initial_params = [param.cpu().detach().numpy() for _, param in self.net.state_dict().items()]
         self.initial_parameters = self.last_weights = fl.common.weights_to_parameters(initial_params)
-        dataset_iterator = get_dataset_loder(config.DATASET, config.CLIENT_NR)
+        dataset_iterator = get_dataset_loder(config.DATASET, config.CLIENT_NR, config.DATA_SKEW)
         self.test_data = dataset_iterator.get_test()
         self.test_loader = DataLoader(self.test_data, batch_size=64, pin_memory=True, num_workers=2)
         self.current_round = 0
@@ -235,13 +235,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         sampled_inds = [i for i, _ in self.gain_history]
         mask = np.zeros(len(self.reward_estimates))
         mask[sampled_inds] = 1
-        print("Gains:")
-        print(rewards)
-        print("Old rewards:")
-        print(np.round(self.reward_estimates, 2))
         self.reward_estimates += (mask * self.alpha * (rewards - self.reward_estimates)) + ((1 - mask ) * -self.reward_estimates + (1 - mask) * self.alpha * self.reward_estimates)
-        print("New rewards:")
-        print(np.round(self.reward_estimates, 2))
 
     def compute_gains(self, weights, results):
         """
