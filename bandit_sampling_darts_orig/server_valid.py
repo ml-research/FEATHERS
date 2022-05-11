@@ -10,9 +10,9 @@ from genotypes import GENOTYPE
 def start_server(rounds):
     device = torch.device('cuda:{}'.format(str(config.SERVER_GPU))) 
     if config.DATASET == 'cifar10':
-        net = NetworkCIFAR(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, False, GENOTYPE)
+        net = NetworkCIFAR(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, False, GENOTYPE, device=device)
     elif config.DATASET == 'imagenet':
-        net = NetworkImageNet(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, False, GENOTYPE)
+        net = NetworkImageNet(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, False, GENOTYPE, device=device)
 
     # prepare log-directories
     prepare_log_dirs()
@@ -23,6 +23,9 @@ def start_server(rounds):
         fraction_eval=0.5,
         initial_net=net,
         alpha=config.ALPHA,
+        min_fit_clients=config.MIN_TRAIN_CLIENTS,
+        min_eval_clients=config.MIN_VAL_CLIENTS,
+        min_available_clients=config.CLIENT_NR,
         stage='valid',
     )
 

@@ -32,7 +32,7 @@ def _test(net, testloader, device):
             #feats = feats.type(torch.FloatTensor)
             #labels = labels.type(torch.LongTensor)
             feats, labels = feats.to(device), labels.to(device)
-            preds = net(feats)
+            preds, _ = net(feats)
             loss += criterion(preds, labels).item()
             _, predicted = torch.max(preds.data, 1)
             total += labels.size(0)
@@ -45,8 +45,8 @@ def train(train_queue, model, criterion, optimizer, device):
   for step, (input, target) in enumerate(train_queue):
     model.train()
 
-    input = input.to(device, non_blocking=True)
-    target = target.to(device, non_blocking=True)
+    input = input.to(device)
+    target = target.to(device)
 
     optimizer.zero_grad()
     logits, _ = model(input)
@@ -86,13 +86,14 @@ def main(dataset, num_clients, device, classes=10, cell_nr=4, input_channels=1, 
             self.criterion = torch.nn.CrossEntropyLoss()
             self.criterion = self.criterion.to(device)
             if config.DATASET == 'cifar10':
-                self.model = NetworkCIFAR(out_channels, classes, cell_nr, False, genotype=GENOTYPE)
+                self.model = NetworkCIFAR(out_channels, classes, cell_nr, False, genotype=GENOTYPE, device=device)
             elif config.DATASET == 'imagenet':
-                self.model = NetworkImageNet(out_channels, classes, cell_nr, False, genotype=GENOTYPE)
+                self.model = NetworkImageNet(out_channels, classes, cell_nr, False, genotype=GENOTYPE, device=device)
             self.model = self.model.to(device)
             self.optimizer = None
             self.train_loader = DataLoader(train_data, 64, pin_memory=True, num_workers=2)
             self.val_loader = DataLoader(test_data, 64, pin_memory=True, num_workers=2)
+            self.hyperparam_config = None
 
         def get_parameters(self):
             return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
@@ -121,13 +122,17 @@ def main(dataset, num_clients, device, classes=10, cell_nr=4, input_channels=1, 
             for e in range(EPOCHS):
                 rtpt.step()
                 self.epoch += 1
-                self.model.drop_path_prob = config.DROP_PATH_PROB * self.epoch / config.ROUNDS
+                self.model.drop_path_prob = self.hyperparam_config['dropout']
                 self.model = train(self.train_loader, self.model, self.criterion, self.optimizer, device)
             after_loss, _ = _test(self.model, self.val_loader, device)
             model_params = self.get_parameters()
             return model_params, len(train_data), {'hidx': int(self.hidx), 'before': float(before_loss), 'after': float(after_loss)}
 
         def evaluate(self, parameters, config):
+            if self.hyperparam_config is not None:
+                self.model.drop_path_prob = self.hyperparam_config['dropout']
+            else:
+                self.model.drop_path_prob = 0.2 # just to ensure that in initial evaluation there's a value set
             self.set_parameters_evaluate(parameters)
             loss, accuracy = _test(self.model, self.val_loader, device)
             return float(loss), len(test_data), {"accuracy": float(accuracy)}
@@ -136,10 +141,13 @@ def main(dataset, num_clients, device, classes=10, cell_nr=4, input_channels=1, 
             self.hyperparam_config = hyperparam
             self.hidx = idx
             if self.optimizer is None:
-                self.optimizer = torch.optim.SGD(self.model.parameters(), self.hyperparam_config['learning_rate'], 0.9, weight_decay=3e-4)
+                self.optimizer = torch.optim.SGD(self.model.parameters(), self.hyperparam_config['learning_rate'], 
+                                                momentum=self.hyperparam_config['momentum'], weight_decay=self.hyperparam_config['weight_decay'])
             else:
                 for g in self.optimizer.param_groups:
                     g['lr'] = self.hyperparam_config['learning_rate']
+                    g['momentum'] = self.hyperparam_config['momentum']
+                    g['weight_decay'] = self.hyperparam_config['weight_decay']
             
     # Start client
     fl.client.start_numpy_client("[::]:{}".format(config.PORT), client=HANFClient())

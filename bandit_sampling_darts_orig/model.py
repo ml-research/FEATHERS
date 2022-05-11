@@ -1,16 +1,16 @@
 import torch
 import torch.nn as nn
 from operations import *
-from torch.autograd import Variable
 from utils import drop_path
 
 
 class Cell(nn.Module):
 
-  def __init__(self, genotype, C_prev_prev, C_prev, C, reduction, reduction_prev):
+  def __init__(self, genotype, C_prev_prev, C_prev, C, reduction, reduction_prev, device):
     super(Cell, self).__init__()
     print(C_prev_prev, C_prev, C)
 
+    self.device = device
     if reduction_prev:
       self.preprocess0 = FactorizedReduce(C_prev_prev, C)
     else:
@@ -52,9 +52,9 @@ class Cell(nn.Module):
       h2 = op2(h2)
       if self.training and drop_prob > 0.:
         if not isinstance(op1, Identity):
-          h1 = drop_path(h1, drop_prob)
+          h1 = drop_path(h1, drop_prob, self.device)
         if not isinstance(op2, Identity):
-          h2 = drop_path(h2, drop_prob)
+          h2 = drop_path(h2, drop_prob, self.device)
       s = h1 + h2
       states += [s]
     return torch.cat([states[i] for i in self._concat], dim=1)
@@ -110,10 +110,11 @@ class AuxiliaryHeadImageNet(nn.Module):
 
 class NetworkCIFAR(nn.Module):
 
-  def __init__(self, C, num_classes, layers, auxiliary, genotype):
+  def __init__(self, C, num_classes, layers, auxiliary, genotype, device):
     super(NetworkCIFAR, self).__init__()
     self._layers = layers
     self._auxiliary = auxiliary
+    self.drop_path_prob = 0.2
 
     stem_multiplier = 3
     C_curr = stem_multiplier*C
@@ -131,7 +132,7 @@ class NetworkCIFAR(nn.Module):
         reduction = True
       else:
         reduction = False
-      cell = Cell(genotype, C_prev_prev, C_prev, C_curr, reduction, reduction_prev)
+      cell = Cell(genotype, C_prev_prev, C_prev, C_curr, reduction, reduction_prev, device)
       reduction_prev = reduction
       self.cells += [cell]
       C_prev_prev, C_prev = C_prev, cell.multiplier*C_curr
@@ -158,10 +159,11 @@ class NetworkCIFAR(nn.Module):
 
 class NetworkImageNet(nn.Module):
 
-  def __init__(self, C, num_classes, layers, auxiliary, genotype):
+  def __init__(self, C, num_classes, layers, auxiliary, genotype, device):
     super(NetworkImageNet, self).__init__()
     self._layers = layers
     self._auxiliary = auxiliary
+    self.drop_path_prob = 0.2
 
     self.stem0 = nn.Sequential(
       nn.Conv2d(3, C // 2, kernel_size=3, stride=2, padding=1, bias=False),
@@ -187,7 +189,7 @@ class NetworkImageNet(nn.Module):
         reduction = True
       else:
         reduction = False
-      cell = Cell(genotype, C_prev_prev, C_prev, C_curr, reduction, reduction_prev)
+      cell = Cell(genotype, C_prev_prev, C_prev, C_curr, reduction, reduction_prev, device)
       reduction_prev = reduction
       self.cells += [cell]
       C_prev_prev, C_prev = C_prev, cell.multiplier * C_curr

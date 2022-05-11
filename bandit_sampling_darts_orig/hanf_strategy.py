@@ -22,7 +22,7 @@ import sys
 
 DEVICE = torch.device("cuda:{}".format(str(config.SERVER_GPU)) if torch.cuda.is_available() else "cpu")
 
-def _test(net, testloader, writer, round):
+def _test(net, testloader, writer, round, stage='search'):
     """Validate the network on the entire test set."""
     criterion = torch.nn.CrossEntropyLoss()
     correct, total, loss = 0, 0, 0.0
@@ -32,7 +32,10 @@ def _test(net, testloader, writer, round):
             #feats = feats.type(torch.FloatTensor)
             #labels = labels.type(torch.LongTensor)
             feats, labels = feats.to(DEVICE), labels.to(DEVICE)
-            preds = net(feats)
+            if stage == 'search':
+                preds = net(feats)
+            else:
+                preds, preds_aux = net(feats)
             writer.add_histogram('logits', preds, round)
             loss += criterion(preds, labels).item()
             _, predicted = torch.max(preds.data, 1)
@@ -275,7 +278,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.set_parameters(params)
         if self.stage == 'valid':
             self.net.drop_path_prob = config.DROP_PATH_PROB * self.current_round / config.ROUNDS
-        loss, accuracy = _test(self.net, self.test_loader, self.writer, self.current_round)
+        loss, accuracy = _test(self.net, self.test_loader, self.writer, self.current_round, self.stage)
 
         # log metrics to tensorboard
         self.writer.add_scalar('Test_Loss', loss, self.current_round)
