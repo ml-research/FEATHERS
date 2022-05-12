@@ -108,6 +108,8 @@ def label_distribution_skew(x, y, partitions, skew=1):
         return runner_labels, runner_split
 
     runn_inds = []
+    if not isinstance(y, torch.Tensor):
+        y = torch.tensor(y)
     N_labels = torch.unique(y).shape[0]
     n_labels, n_runners = runner_split(N_labels, partitions)
     np.random.seed(42)
