@@ -81,6 +81,8 @@ DATA_SKEW = {0, 0.5} # skew of labels. 0 = iid case, 0.5 = our skewed case
 # validation stage
 DROP_PATH_PROB = 0.2 # probability of dropping a path in cell, similar to dropout
 ```
+The following should NOT be changed:
+`ROUNDS`, `ALPHA`, `HYPERPARAM_CONFIG_NR`, `BATCH_SIZE`, `LOG_DIR`, `REINIT`, `CLASSES`, `OUT_CHANNELS`, `NODE_NR`, `DROP_PATH_PROB`.
 
 The hyperparameter-space definition in `hyperparameters.py` should look like:
 ```python
@@ -129,6 +131,8 @@ DATA_SKEW = {0, 0.5} # skew of labels. 0 = iid case, 0.5 = our skewed case
 # validation stage
 DROP_PATH_PROB = 0.2 # probability of dropping a path in cell, similar to dropout
 ```
+The following should NOT be changed:
+`ROUNDS`, `ALPHA`, `HYPERPARAM_CONFIG_NR`, `BATCH_SIZE`, `LOG_DIR`, `REINIT`, `CLASSES`, `OUT_CHANNELS`, `NODE_NR`, `DROP_PATH_PROB`.
 
 The hyperparameter-space definition in `hyperparameters.py` should look like:
 ```python
