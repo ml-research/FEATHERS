@@ -144,7 +144,7 @@ def uniform_distribution(inds, partitions, randomise=True):
         runner_data.append(partition)
     return runner_data
 
-def partition_skewed(train_set, val_set, partitions, randomise=True, skew=1):
+def partition_skewed(train_set, val_set, partitions, randomise=True, skew=0):
     # randomly select half of the data of the validation set to be the test-set
     ind_in_val = np.random.choice([0, 1], p=[0.5, 0.5], size=len(val_set))
     val_inds = np.argwhere(ind_in_val == 1).reshape(1, -1)[0]

@@ -75,7 +75,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.initial_parameters = self.last_weights = fl.common.weights_to_parameters(initial_params)
         dataset_iterator = get_dataset_loder(config.DATASET, config.CLIENT_NR, config.DATA_SKEW)
         self.test_data = dataset_iterator.get_test()
-        self.test_loader = DataLoader(self.test_data, batch_size=64, pin_memory=True, num_workers=2)
+        self.test_loader = DataLoader(self.test_data, batch_size=config.BATCH_SIZE, pin_memory=True, num_workers=2)
         self.current_round = 0
         tb_log_prefix = 'Server_{}' if stage == 'search' else 'Server_valid_{}'
         self.writer = SummaryWriter(log_dir + tb_log_prefix.format(self.date))

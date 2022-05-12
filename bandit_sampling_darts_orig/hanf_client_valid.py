@@ -86,13 +86,13 @@ def main(dataset, num_clients, device, classes=10, cell_nr=4, input_channels=1, 
             self.criterion = torch.nn.CrossEntropyLoss()
             self.criterion = self.criterion.to(device)
             if config.DATASET == 'cifar10':
-                self.model = NetworkCIFAR(out_channels, classes, cell_nr, False, genotype=GENOTYPE, device=device)
+                self.model = NetworkCIFAR(out_channels, classes, cell_nr, False, genotype=GENOTYPE, device=device, in_channels=input_channels)
             elif config.DATASET == 'imagenet':
                 self.model = NetworkImageNet(out_channels, classes, cell_nr, False, genotype=GENOTYPE, device=device)
             self.model = self.model.to(device)
             self.optimizer = None
-            self.train_loader = DataLoader(train_data, 64, pin_memory=True, num_workers=2)
-            self.val_loader = DataLoader(test_data, 64, pin_memory=True, num_workers=2)
+            self.train_loader = DataLoader(train_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
+            self.val_loader = DataLoader(test_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
             self.hyperparam_config = None
 
         def get_parameters(self):
