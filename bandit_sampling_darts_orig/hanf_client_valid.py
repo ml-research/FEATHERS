@@ -85,7 +85,7 @@ def main(dataset, num_clients, device, classes=10, cell_nr=4, input_channels=1, 
             self.hyperparameters = Hyperparameters.instance(config.HYPERPARAM_CONFIG_NR)
             self.criterion = torch.nn.CrossEntropyLoss()
             self.criterion = self.criterion.to(device)
-            if config.DATASET == 'cifar10':
+            if config.DATASET == 'cifar10' or config.DATASET == 'fmnist':
                 self.model = NetworkCIFAR(out_channels, classes, cell_nr, False, genotype=GENOTYPE, device=device, in_channels=input_channels)
             elif config.DATASET == 'imagenet':
                 self.model = NetworkImageNet(out_channels, classes, cell_nr, False, genotype=GENOTYPE, device=device)
