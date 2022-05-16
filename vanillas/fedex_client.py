@@ -81,6 +81,7 @@ def main(device):
             self.date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
             os.mkdir('./fedex_models/Client_{}'.format(self.date))
             self.writer = SummaryWriter("./runs/Client_{}".format(self.date))
+            self.optim = torch.optim.SGD(net.parameters(), 0.01, momentum=0.9, weight_decay=1e-4)
             self.epoch = 1
 
         def get_parameters(self):

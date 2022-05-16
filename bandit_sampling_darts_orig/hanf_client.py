@@ -89,7 +89,8 @@ def main(dataset, num_clients, device, classes=10, cell_nr=4, input_channels=1, 
         def __init__(self, *args, **kwargs) -> None:
             super().__init__(*args, **kwargs)
             self.epoch = 0
-            self.hyperparameters = Hyperparameters.instance(config.HYPERPARAM_CONFIG_NR)
+            self.hyperparameters = Hyperparameters(config.HYPERPARAM_CONFIG_NR)
+            self.hyperparameters.read_from_csv(config.HYPERPARAM_FILE)
             self.criterion = torch.nn.CrossEntropyLoss()
             self.criterion = self.criterion.to(device)
             self.model = Network(out_channels, classes, cell_nr, self.criterion, device, in_channels=input_channels)

@@ -21,11 +21,13 @@ IN_CHANNELS = 3 # mumber of input-channels (e.g. 3 for rgb-images)
 OUT_CHANNELS = 16 # number of output-channels
 NODE_NR = 7 # number of nodes per cell
 
-PORT = '8068'
-GPUS = [1, 2] # GPUs to use
-SERVER_GPU = 2
+PORT = '8050'
+GPUS = [0, 7] # GPUs to use
+SERVER_GPU = 0
 
-DATA_SKEW = 0.5 # skew of labels. 0 = no skew, 1 only some clients hold some labels
+DATA_SKEW = 0 # skew of labels. 0 = no skew, 1 only some clients hold some labels
 
 # validation stage
 DROP_PATH_PROB = 0.2 # probability of dropping a path in cell, similar to dropout
+
+HYPERPARAM_FILE = f'./hyperparam-logs/search_{DATASET}_{CLIENT_NR}_{DATA_SKEW}.csv'

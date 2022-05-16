@@ -65,7 +65,8 @@ class HANFStrategy(fl.server.strategy.FedAvg):
                                 around those for which p(configuration) > epsilon holds. Smaller beta leads to a more wide-spread distribution. Defaults to 1.
         """
         super().__init__(fraction_fit=fraction_fit, fraction_eval=fraction_eval, **args)
-        self.hyperparams = Hyperparameters.instance(config.HYPERPARAM_CONFIG_NR)
+        self.hyperparams = Hyperparameters(config.HYPERPARAM_CONFIG_NR)
+        self.hyperparams.save(config.HYPERPARAM_FILE)
         self.date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
         log_hyper_params(self.hyperparams.to_dict(), 'hyperparam-logs/hyperparameters_{}.json'.format(self.date))
         self.use_gain_avg = use_gain_avg
