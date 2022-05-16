@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from numproto import proto_to_ndarray, ndarray_to_proto
 from helpers import ProtobufNumpyArray, log_model_weights, log_hyper_config, log_hyper_params
-from utils import FashionMNISTLoader, discounted_mean
+from utils import get_dataset_loder, discounted_mean
 from collections import OrderedDict
 import torch
 from torch.utils.data import DataLoader
@@ -12,6 +12,7 @@ from tensorboardX import SummaryWriter
 from rtpt import RTPT
 from scipy.special import logsumexp
 from numpy.linalg import norm
+import config
 
 DEVICE = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
@@ -75,12 +76,12 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.net.to(DEVICE)
         initial_params = [param.cpu().detach().numpy() for _, param in self.net.state_dict().items()]
         self.initial_parameters = self.last_weights = fl.common.weights_to_parameters(initial_params)
-        fashion_mnist_iterator = FashionMNISTLoader.instance(2)
-        self.test_data = fashion_mnist_iterator.get_test()
-        self.test_loader = DataLoader(self.test_data, batch_size=64, pin_memory=True, num_workers=2)
+        data_loader = get_dataset_loder(config.DATASET, config.CLIENTS, config.DATA_SKEW)
+        self.test_data = data_loader.get_test()
+        self.test_loader = DataLoader(self.test_data, batch_size=config.BATCH_SIZE, pin_memory=True, num_workers=2)
         self.current_round = 1
         self.writer = SummaryWriter(log_dir)
-        self.rtpt = RTPT('JS', 'HANF_Server', 20)
+        self.rtpt = RTPT('JS', 'HANF_Server', config.ROUNDS)
         self.rtpt.start()
         self.distribution_history = []
         self.gain_history = [] # initialize with [0] to avoid nan-values in discounted mean

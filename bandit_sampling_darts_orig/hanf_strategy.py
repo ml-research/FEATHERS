@@ -170,7 +170,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             normed_rewards = self.reward_estimates
         dist = softmax(normed_rewards)
         config_inds = np.arange(0, len(self.hyperparams))
-        self.exploration_steps = int(np.round(self.gamma * entropy(dist), 0))
+        self.exploration_steps = 1 #int(np.round(self.gamma * entropy(dist), 0))
         print('Exploring for {} rounds'.format(self.exploration_steps))
         if self.exploration_mode == 'greedy':
             self.current_exploration = np.random.choice(config_inds, self.exploration_steps, p=dist)

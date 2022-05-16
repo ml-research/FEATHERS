@@ -6,24 +6,26 @@ import flwr as fl
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from utils import FashionMNISTLoader
-from fedex_model import Net
+from utils import get_dataset_loder
+from fedex_model import NetworkCIFAR
 from rtpt import RTPT
 import numpy as np
 from tensorboardX import SummaryWriter
 from datetime import datetime as dt
+import config
+from genotypes import GENOTYPE
+import argparse
 
 warnings.filterwarnings("ignore", category=UserWarning)
-DEVICE = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
 EPOCHS = 1
 
-def train(net, trainloader, lr, writer, epoch):
+def train(net, trainloader, lr, writer, epoch, device):
     """Train the network on the training set."""
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9)
     running_loss = 0
     for i, (images, labels) in enumerate(trainloader):
-        images, labels = images.to(DEVICE), labels.to(DEVICE)
+        images, labels = images.to(device), labels.to(device)
         optimizer.zero_grad()
         logits = net(images)
         writer.add_histogram('logits', logits, i*epoch)
@@ -34,7 +36,7 @@ def train(net, trainloader, lr, writer, epoch):
         optimizer.step()
     writer.add_scalar('Training_Loss', running_loss, epoch)
 
-def _test(net, testloader):
+def _test(net, testloader, device):
     """Validate the network on the entire test set."""
     criterion = torch.nn.CrossEntropyLoss()
     correct, total, loss = 0, 0, 0.0
@@ -43,7 +45,7 @@ def _test(net, testloader):
         for feats, labels in testloader:
             #feats = feats.type(torch.FloatTensor)
             #labels = labels.type(torch.LongTensor)
-            feats, labels = feats.to(DEVICE), labels.to(DEVICE)
+            feats, labels = feats.to(device), labels.to(device)
             preds = net(feats)
             loss += criterion(preds, labels).item()
             _, predicted = torch.max(preds.data, 1)
@@ -57,18 +59,18 @@ def _test(net, testloader):
 # 2. Federation of the pipeline with Flower
 # #############################################################################
 
-def main():
+def main(device):
     """Create model, load data, define Flower client, start Flower client."""
 
     # Load model
-    net = Net()
-    net.to(DEVICE)
+    net = NetworkCIFAR(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, False, GENOTYPE, device, config.IN_CHANNELS)
+    net.to(device)
 
     # Load data
-    fashion_mnist_iterator = FashionMNISTLoader.instance(2)
-    train_data, test_data = next(fashion_mnist_iterator.get_client_data())
-    train_data, test_data = DataLoader(train_data, 64, False), DataLoader(test_data, 64, False)
-    rtpt = RTPT('JS', 'HANF_Client', EPOCHS)
+    dataset_loader = get_dataset_loder(config.DATASET, config.CLIENTS, config.DATA_SKEW)
+    train_data, test_data = next(dataset_loader.get_client_data())
+    train_data, test_data = DataLoader(train_data, config.BATCH_SIZE, False), DataLoader(test_data, config.BATCH_SIZE, False)
+    rtpt = RTPT('JS', 'HANF_Client', config.ROUNDS)
     rtpt.start()
 
     # Flower client
@@ -103,9 +105,9 @@ def main():
 
         def fit(self, parameters, config):
             self.set_parameters_train(parameters, config)
-            before_loss, _ = _test(net, test_data)
-            train(net, train_data, self.hyperparam_config, self.writer, self.epoch)
-            after_loss, _ = _test(net, test_data)
+            before_loss, _ = _test(net, test_data, device)
+            train(net, train_data, self.hyperparam_config, self.writer, self.epoch, device)
+            after_loss, _ = _test(net, test_data, device)
             model_params = self.get_parameters()
             rtpt.step()
             torch.save(net, "./fedex_models/Client_{}/net_round_{}".format(self.date, self.epoch))
@@ -114,7 +116,7 @@ def main():
 
         def evaluate(self, parameters, config):
             self.set_parameters_evaluate(parameters)
-            loss, accuracy = _test(net, test_data)
+            loss, accuracy = _test(net, test_data, device)
             return float(loss), len(test_data), {"accuracy": float(accuracy)}
 
         def _sample_hyperparams(self):
@@ -125,8 +127,13 @@ def main():
             return hyp_config, hyp_idx
 
     # Start client
-    fl.client.start_numpy_client("[::]:8081", client=MyClient())
+    fl.client.start_numpy_client("[::]:{}".format(config.PORT), client=MyClient())
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--gpu', default='0', type=str)
+
+    args = parser.parse_args()
+    device = torch.device('cuda:{}'.format(args.gpu))
+    main(device)
