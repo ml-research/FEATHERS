@@ -74,8 +74,9 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.net.to(DEVICE)
         initial_params = [param.cpu().detach().numpy() for _, param in self.net.state_dict().items()]
         self.initial_parameters = self.last_weights = fl.common.weights_to_parameters(initial_params)
-        dataset_iterator = get_dataset_loder(config.DATASET, config.CLIENT_NR, config.DATA_SKEW)
-        self.test_data = dataset_iterator.get_test()
+        dataset_iterator = get_dataset_loder(config.DATASET, config.CLIENT_NR, config.DATASET_INDS_FILE, config.DATA_SKEW)
+        dataset_iterator.partition() # distribute data
+        self.test_data = dataset_iterator.load_server_data()
         self.test_loader = DataLoader(self.test_data, batch_size=config.BATCH_SIZE, pin_memory=True, num_workers=2)
         self.current_round = 0
         tb_log_prefix = 'Server_{}' if stage == 'search' else 'Server_valid_{}'
@@ -171,7 +172,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             normed_rewards = self.reward_estimates
         dist = softmax(normed_rewards)
         config_inds = np.arange(0, len(self.hyperparams))
-        self.exploration_steps = 1 #int(np.round(self.gamma * entropy(dist), 0))
+        self.exploration_steps = int(np.round(self.gamma * entropy(dist), 0))
         print('Exploring for {} rounds'.format(self.exploration_steps))
         if self.exploration_mode == 'greedy':
             self.current_exploration = np.random.choice(config_inds, self.exploration_steps, p=dist)

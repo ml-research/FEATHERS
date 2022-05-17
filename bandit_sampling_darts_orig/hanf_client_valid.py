@@ -65,12 +65,12 @@ def train(train_queue, model, criterion, optimizer, device):
 # 2. Federation of the pipeline with Flower
 # #############################################################################
 
-def main(dataset, num_clients, device, classes=10, cell_nr=4, input_channels=1, out_channels=16, node_nr=7):
+def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_channels=1, out_channels=16, node_nr=7):
     """Create model, load data, define Flower client, start Flower client."""
 
     # Load data
-    fashion_mnist_iterator = get_dataset_loder(dataset, num_clients)
-    train_data, test_data = next(fashion_mnist_iterator.get_client_data())
+    data_loader = get_dataset_loder(dataset, num_clients, config.DATASET_INDS_FILE, skew=config.DATA_SKEW)
+    train_data, test_data = data_loader.load_client_data(client_id)
     date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
     writer = SummaryWriter("./runs/Client_val_{}".format(date))
     rtpt = RTPT('JS', 'HANF_Client', EPOCHS)
@@ -82,7 +82,8 @@ def main(dataset, num_clients, device, classes=10, cell_nr=4, input_channels=1, 
         def __init__(self, *args, **kwargs) -> None:
             super().__init__(*args, **kwargs)
             self.epoch = 0
-            self.hyperparameters = Hyperparameters.instance(config.HYPERPARAM_CONFIG_NR)
+            self.hyperparameters = Hyperparameters(config.HYPERPARAM_CONFIG_NR)
+            self.hyperparameters.read_from_csv(config.HYPERPARAM_FILE)
             self.criterion = torch.nn.CrossEntropyLoss()
             self.criterion = self.criterion.to(device)
             if config.DATASET == 'cifar10' or config.DATASET == 'fmnist':
@@ -156,8 +157,9 @@ def main(dataset, num_clients, device, classes=10, cell_nr=4, input_channels=1, 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--gpu', default='0', type=str)
+    parser.add_argument('--id', type=int)
 
     args = parser.parse_args()
     device = torch.device('cuda:{}'.format(args.gpu))
-    main(config.DATASET, config.CLIENT_NR, device, config.CLASSES, config.CELL_NR, 
+    main(config.DATASET, config.CLIENT_NR, device, args.id, config.CLASSES, config.CELL_NR, 
         config.IN_CHANNELS, config.OUT_CHANNELS, config.NODE_NR)
