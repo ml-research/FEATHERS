@@ -96,8 +96,8 @@ def main(dataset, num_clients, device, classes=10, cell_nr=4, input_channels=1, 
             self.model = Network(out_channels, classes, cell_nr, self.criterion, device, in_channels=input_channels)
             self.model = self.model.to(device)
             self.optimizer = torch.optim.SGD(self.model.parameters(), 0.01, 0.9, 3e-4)
-            self.train_loader = DataLoader(train_data, 64, pin_memory=True, num_workers=2)
-            self.val_loader = DataLoader(test_data, 64, pin_memory=True, num_workers=2)
+            self.train_loader = DataLoader(train_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
+            self.val_loader = DataLoader(test_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
             self.architect = Architect(self.model, 0.9, 3e-4, 3e-4, 1e-3, device)
 
         def get_parameters(self):

@@ -6,11 +6,14 @@ import argparse
 import config
 from genotypes import GENOTYPE
 import torch
+from helpers import prepare_log_dirs
 
 def start_server(beta, epsilon, log_dir, rounds, dataset):
     device = torch.device("cuda:{}".format(config.SERVER_GPU))
     net = NetworkCIFAR(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, False, GENOTYPE, device, config.IN_CHANNELS)
 
+    prepare_log_dirs()
+    
     # Define strategy
     strategy = HANFStrategy(
         fraction_fit=0.5,

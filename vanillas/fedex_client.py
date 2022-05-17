@@ -15,19 +15,19 @@ from datetime import datetime as dt
 import config
 from genotypes import GENOTYPE
 import argparse
+from hyperparameters import Hyperparameters
 
 warnings.filterwarnings("ignore", category=UserWarning)
 EPOCHS = 1
 
-def train(net, trainloader, lr, writer, epoch, device):
+def train(net, trainloader, writer, epoch, optimizer, device):
     """Train the network on the training set."""
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=0.9)
     running_loss = 0
     for i, (images, labels) in enumerate(trainloader):
         images, labels = images.to(device), labels.to(device)
         optimizer.zero_grad()
-        logits = net(images)
+        logits, _ = net(images)
         writer.add_histogram('logits', logits, i*epoch)
         loss = criterion(logits, labels)
         loss.backward()
@@ -46,7 +46,7 @@ def _test(net, testloader, device):
             #feats = feats.type(torch.FloatTensor)
             #labels = labels.type(torch.LongTensor)
             feats, labels = feats.to(device), labels.to(device)
-            preds = net(feats)
+            preds, _ = net(feats)
             loss += criterion(preds, labels).item()
             _, predicted = torch.max(preds.data, 1)
             total += labels.size(0)
@@ -81,6 +81,8 @@ def main(device):
             self.date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
             os.mkdir('./fedex_models/Client_{}'.format(self.date))
             self.writer = SummaryWriter("./runs/Client_{}".format(self.date))
+            self.hyperparameters = Hyperparameters(config.HYPERPARAM_CONFIG_NR)
+            self.hyperparameters.read_from_csv(config.HYPERPARAM_FILE)
             self.optim = torch.optim.SGD(net.parameters(), 0.01, momentum=0.9, weight_decay=1e-4)
             self.epoch = 1
 
@@ -94,6 +96,11 @@ def main(device):
             
             # remove hyperparameter distribution from parameter list
             parameters = parameters[:-1]
+
+            for g in self.optim.param_groups:
+                g['lr'] = self.hyperparam_config['learning_rate']
+                g['momentum'] = self.hyperparam_config['momentum']
+                g['weight_decay'] = self.hyperparam_config['weight_decay']
             
             params_dict = zip(net.state_dict().keys(), parameters)
             state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
@@ -107,16 +114,18 @@ def main(device):
         def fit(self, parameters, config):
             self.set_parameters_train(parameters, config)
             before_loss, _ = _test(net, test_data, device)
-            train(net, train_data, self.hyperparam_config, self.writer, self.epoch, device)
+            net.drop_path_prob = self.hyperparam_config['dropout']
+            train(net, train_data, self.writer, self.epoch, self.optim, device)
             after_loss, _ = _test(net, test_data, device)
             model_params = self.get_parameters()
             rtpt.step()
             torch.save(net, "./fedex_models/Client_{}/net_round_{}".format(self.date, self.epoch))
             self.epoch += 1
-            return model_params, len(train_data), {'lr': self.hyperparam_config, 'hidx': self.hidx, 'before': before_loss, 'after': after_loss}
+            return model_params, len(train_data), {'hidx': self.hidx, 'before': before_loss, 'after': after_loss}
 
         def evaluate(self, parameters, config):
             self.set_parameters_evaluate(parameters)
+            net.drop_path_prob = self.hyperparam_config['dropout']
             loss, accuracy = _test(net, test_data, device)
             return float(loss), len(test_data), {"accuracy": float(accuracy)}
 
@@ -124,7 +133,7 @@ def main(device):
             # obtain new learning rate for this batch
             distribution = torch.distributions.Categorical(torch.FloatTensor(self.distribution))
             hyp_idx = distribution.sample().item()
-            hyp_config = self.hyperparams[hyp_idx]
+            hyp_config = self.hyperparameters[hyp_idx]
             return hyp_config, hyp_idx
 
     # Start client

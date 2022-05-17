@@ -13,6 +13,7 @@ from rtpt import RTPT
 from scipy.special import logsumexp
 from numpy.linalg import norm
 import config
+from hyperparameters import Hyperparameters
 
 DEVICE = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
@@ -63,7 +64,8 @@ class HANFStrategy(fl.server.strategy.FedAvg):
                                 around those for which p(configuration) > epsilon holds. Smaller beta leads to a more wide-spread distribution. Defaults to 1.
         """
         super().__init__(fraction_fit=fraction_fit, fraction_eval=fraction_eval, **args)
-        self.hyperparams = np.sort(10 ** (np.random.uniform(-4, 0, 40))) # sorting is important for distribution update
+        self.hyperparams = Hyperparameters(config.HYPERPARAM_CONFIG_NR)
+        self.hyperparams.save(config.HYPERPARAM_FILE)
         log_hyper_params({'learning_rates': self.hyperparams})
         self.log_distribution = np.full(len(self.hyperparams), -np.log(self.hyperparams))
         self.distribution = np.exp(self.log_distribution)

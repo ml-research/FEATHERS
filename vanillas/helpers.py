@@ -3,6 +3,7 @@ import torch.nn.functional as F
 import torch
 from sklearn.metrics import accuracy_score
 import json
+import os
 
 def log_model_weights(model, step, writer):
     for name, weight in model.named_parameters():
@@ -37,6 +38,12 @@ def get_hyperparameter_id(name, client_id):
     log_name = '_'.join(split_name)
     log_name = 'client_{}_'.format(client_id) + log_name
     return log_name
+
+def prepare_log_dirs():
+    if not os.path.exists('./hyperparam-logs/'):
+        os.mkdir('./hyperparam-logs')
+    if not os.path.exists('./models/'):
+        os.mkdir('./models')
 
 class ProtobufNumpyArray:
     """
