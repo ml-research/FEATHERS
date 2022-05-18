@@ -47,8 +47,7 @@ def model_improved(results, weights):
 class HANFStrategy(fl.server.strategy.FedAvg):
 
     def __init__(self, fraction_fit, fraction_eval, initial_net, 
-                log_dir='./runs/', epsilon=0.8, beta=1, nabla=0.1, 
-                discount_factor=0.9, use_gain_avg=False, **args) -> None:
+                log_dir='./runs/', discount_factor=0.9, use_gain_avg=False, **args) -> None:
         """
         Intitialize the HANF strategy used by flwr to aggregation of model parameters.
 
@@ -67,8 +66,6 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         log_hyper_params({'learning_rates': self.hyperparams})
         self.log_distribution = np.full(len(self.hyperparams), -np.log(self.hyperparams))
         self.distribution = np.exp(self.log_distribution)
-        self.epsilon = epsilon
-        self.beta = beta
         self.eta = np.sqrt(2*np.log(len(self.hyperparams)))
         self.discount_factor = discount_factor,
         self.use_gain_avg = use_gain_avg

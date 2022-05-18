@@ -15,7 +15,7 @@ from numpy.linalg import norm
 import config
 from hyperparameters import Hyperparameters
 
-DEVICE = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:{}".format(config.SERVER_GPU))
 
 def _test(net, testloader, writer, round):
     """Validate the network on the entire test set."""
@@ -27,7 +27,7 @@ def _test(net, testloader, writer, round):
             #feats = feats.type(torch.FloatTensor)
             #labels = labels.type(torch.LongTensor)
             feats, labels = feats.to(DEVICE), labels.to(DEVICE)
-            preds = net(feats)
+            preds, _ = net(feats)
             writer.add_histogram('logits', preds, round)
             loss += criterion(preds, labels).item()
             _, predicted = torch.max(preds.data, 1)
@@ -48,8 +48,7 @@ def model_improved(results, weights):
 class HANFStrategy(fl.server.strategy.FedAvg):
 
     def __init__(self, fraction_fit, fraction_eval, initial_net, 
-                log_dir='./runs/', epsilon=0.8, beta=1, nabla=0.1, 
-                discount_factor=0.9, use_gain_avg=False, **args) -> None:
+                log_dir='./runs/', discount_factor=0.9, use_gain_avg=False, **args) -> None:
         """
         Intitialize the HANF strategy used by flwr to aggregation of model parameters.
 
@@ -67,10 +66,8 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.hyperparams = Hyperparameters(config.HYPERPARAM_CONFIG_NR)
         self.hyperparams.save(config.HYPERPARAM_FILE)
         log_hyper_params({'learning_rates': self.hyperparams})
-        self.log_distribution = np.full(len(self.hyperparams), -np.log(self.hyperparams))
+        self.log_distribution = np.full(len(self.hyperparams), -np.log(len(self.hyperparams)))
         self.distribution = np.exp(self.log_distribution)
-        self.epsilon = epsilon
-        self.beta = beta
         self.eta = np.sqrt(2*np.log(len(self.hyperparams)))
         self.discount_factor = discount_factor,
         self.use_gain_avg = use_gain_avg
@@ -78,8 +75,9 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.net.to(DEVICE)
         initial_params = [param.cpu().detach().numpy() for _, param in self.net.state_dict().items()]
         self.initial_parameters = self.last_weights = fl.common.weights_to_parameters(initial_params)
-        data_loader = get_dataset_loder(config.DATASET, config.CLIENTS, config.DATA_SKEW)
-        self.test_data = data_loader.get_test()
+        data_loader = get_dataset_loder(config.DATASET, config.CLIENT_NR, config.DATASET_INDS_FILE, config.DATA_SKEW)
+        data_loader.partition()
+        self.test_data = data_loader.load_server_data()
         self.test_loader = DataLoader(self.test_data, batch_size=config.BATCH_SIZE, pin_memory=True, num_workers=2)
         self.current_round = 1
         self.writer = SummaryWriter(log_dir)
@@ -248,17 +246,8 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         # log metrics to tensorboard
         self.writer.add_scalar('Test_Loss', loss, self.current_round)
         self.writer.add_scalar('Test_Accuracy', accuracy, self.current_round)
-        log_model_weights(self.net, self.current_round, self.writer)
 
-        # persist model
-        torch.save(self.net, './fedex_models/net_round_{}'.format(self.current_round))
         self.current_round += 1
-
-        # log graph in the end
-        if self.current_round >= 20:
-            X, y = next(iter(self.test_loader))
-            X, y = X.to(DEVICE, non_blocking=True), y.to(DEVICE, non_blocking=True)
-            self.writer.add_graph(self.net, X)
 
         # since evaluate is the last method being called in one round, step rtpt here
         self.rtpt.step()

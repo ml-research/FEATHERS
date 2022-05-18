@@ -7,33 +7,52 @@ from torch.autograd import Variable
 from torch.utils.data import random_split, Subset
 import torchvision
 import math
+import json
 
 class FashionMNISTLoader:
 
-    _instance = None
-
-    def __init__(self, n_clients, skew=0) -> None:
-        if FashionMNISTLoader._instance is not None:
-            raise RuntimeError("FashionMNISTLoader is a singleton, use instance()")
+    def __init__(self, n_clients, indspath, skew=0) -> None:
         self.n_clients = n_clients
         self.skew = skew
-        self._load_data()
-        
-    @classmethod
-    def instance(cls, n_clients=2, skew=0):
-        if FashionMNISTLoader._instance is None:
-            FashionMNISTLoader._instance = FashionMNISTLoader(n_clients, skew=skew)
-        return FashionMNISTLoader._instance
+        self.indspath = indspath
+        transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize((0,), (1,))])
+        self.train_data = torchvision.datasets.FashionMNIST('../../../datasets/femnist/', download=True, train=True, transform=transform)
+        self.val_data = torchvision.datasets.FashionMNIST('../../../datasets/femnist/', download=True, train=False, transform=transform)
 
-    def _load_data(self):
+    def partition(self):
         """
         Loads the Fashion-MNIST dataset
         """
-        transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize((0,), (1,))])
-        train_data = torchvision.datasets.FashionMNIST('../../../datasets/femnist/', download=True, train=True, transform=transform)
-        val_data = torchvision.datasets.FashionMNIST('../../../datasets/femnist/', download=True, train=False, transform=transform)
-        self.train_partitions, self.val_partitions, self.test_set = partition_skewed(train_data, val_data, self.n_clients, skew=self.skew)
-        
+        self.train_partitions, self.val_partitions, self.test_set, train_inds, val_inds, test_inds = partition_skewed(self.train_data, self.val_data, self.n_clients, skew=self.skew)
+        train_dict, val_dict = {}, {}
+        for i, inds in enumerate(train_inds):
+            train_dict[i] = inds.tolist()
+        for i, inds in enumerate(val_inds):
+            val_dict[i] = inds.tolist()
+        json_dict = {
+            'train': train_dict,
+            'val': val_dict,
+            'test': test_inds.tolist()
+        }
+        with open(self.indspath, 'w+') as f:
+            json.dump(json_dict, f)
+
+    def load_client_data(self, client_id):
+        with open(self.indspath, 'r') as f:
+            inds_dict = json.load(f)
+        train_inds = np.array(inds_dict['train'][str(client_id)])
+        val_inds = np.array(inds_dict['val'][str(client_id)])
+        trainset = Subset(self.train_data, train_inds)
+        valset = Subset(self.val_data, val_inds)
+        return trainset, valset
+
+    def load_server_data(self):
+        with open(self.indspath, 'r') as f:
+            inds_dict = json.load(f)
+        test_inds = np.array(inds_dict['test'])
+        testset = Subset(self.val_data, test_inds)
+        return testset
+         
     def get_client_data(self):
         for train, val in zip(self.train_partitions, self.val_partitions):
             yield train, val
@@ -43,30 +62,48 @@ class FashionMNISTLoader:
 
 class CIFAR10Loader:
 
-    _instance = None
-
-    def __init__(self, n_clients, skew=0) -> None:
-        if CIFAR10Loader._instance is not None:
-            raise RuntimeError("CIFAR10Loader is a singleton, use instance()")
+    def __init__(self, n_clients, indspath, skew=0) -> None:
         self.n_clients = n_clients
         self.skew = skew
-        self._load_data()
-        
-    @classmethod
-    def instance(cls, n_clients=2, skew=0):
-        if CIFAR10Loader._instance is None:
-            CIFAR10Loader._instance = CIFAR10Loader(n_clients, skew=skew)
-        return CIFAR10Loader._instance
+        self.indspath = indspath
+        transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize((0,), (1,))])
+        self.train_data = torchvision.datasets.CIFAR10('../../../datasets/cifar10/', download=True, train=True, transform=transform)
+        self.val_data = torchvision.datasets.CIFAR10('../../../datasets/cifar10/', download=True, train=False, transform=transform)
 
-    def _load_data(self):
+    def partition(self):
         """
         Loads the Fashion-MNIST dataset
         """
-        transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize((0,), (1,))])
-        train_data = torchvision.datasets.CIFAR10('../../../datasets/cifar10/', download=True, train=True, transform=transform)
-        val_data = torchvision.datasets.CIFAR10('../../../datasets/cifar10/', download=True, train=False, transform=transform)
-        self.train_partitions, self.val_partitions, self.test_set = partition_skewed(train_data, val_data, self.n_clients, skew=self.skew)
-        
+        self.train_partitions, self.val_partitions, self.test_set, train_inds, val_inds, test_inds = partition_skewed(self.train_data, self.val_data, self.n_clients, skew=self.skew)
+        train_dict, val_dict = {}, {}
+        for i, inds in enumerate(train_inds):
+            train_dict[i] = inds.tolist()
+        for i, inds in enumerate(val_inds):
+            val_dict[i] = inds.tolist()
+        json_dict = {
+            'train': train_dict,
+            'val': val_dict,
+            'test': test_inds.tolist()
+        }
+        with open(self.indspath, 'w+') as f:
+            json.dump(json_dict, f)
+
+    def load_client_data(self, client_id):
+        with open(self.indspath, 'r') as f:
+            inds_dict = json.load(f)
+        train_inds = np.array(inds_dict['train'][str(client_id)])
+        val_inds = np.array(inds_dict['val'][str(client_id)])
+        trainset = Subset(self.train_data, train_inds)
+        valset = Subset(self.val_data, val_inds)
+        return trainset, valset
+
+    def load_server_data(self):
+        with open(self.indspath, 'r') as f:
+            inds_dict = json.load(f)
+        test_inds = np.array(inds_dict['test'])
+        testset = Subset(self.val_data, test_inds)
+        return testset
+         
     def get_client_data(self):
         for train, val in zip(self.train_partitions, self.val_partitions):
             yield train, val
@@ -74,11 +111,12 @@ class CIFAR10Loader:
     def get_test(self):
         return self.test_set
 
-def get_dataset_loder(dataset, num_clients, skew=0):
+
+def get_dataset_loder(dataset, num_clients, indspath, skew=0):
     if dataset == 'fmnist':
-        return FashionMNISTLoader.instance(num_clients, skew=skew)
+        return FashionMNISTLoader(num_clients, indspath, skew=skew)
     elif dataset == 'cifar10':
-        return CIFAR10Loader.instance(num_clients, skew=skew)
+        return CIFAR10Loader(num_clients, indspath, skew=skew)
     else:
         raise ValueError('{} is not supported'.format(dataset))
 
@@ -153,6 +191,7 @@ def partition_skewed(train_set, val_set, partitions, randomise=True, skew=0):
     test_inds = np.argwhere(ind_in_val == 0).reshape(1, -1)[0]
     train_partitions, val_partitions, test_set = [], [], Subset(val_set, test_inds)
     train_inds = np.arange(len(train_set))
+    train_subs_inds, val_subs_inds, test_subs_inds = [], [], test_inds
     if skew == 0:
         train_unfiorm = uniform_distribution(train_inds, partitions, randomise)
         val_uniform = uniform_distribution(val_inds, partitions, randomise)
@@ -161,6 +200,8 @@ def partition_skewed(train_set, val_set, partitions, randomise=True, skew=0):
             val_subset = Subset(val_set, v)
             train_partitions.append(train_subset)
             val_partitions.append(val_subset)
+            train_subs_inds.append(t)
+            val_subs_inds.append(v)
     else:
         # build skewed data-sets
         train_selected, train_inds_remain = label_distribution_skew(train_set.data, train_set.targets, partitions, skew)
@@ -175,13 +216,15 @@ def partition_skewed(train_set, val_set, partitions, randomise=True, skew=0):
             indices = np.concatenate((s, p))
             subset = Subset(train_set, indices)
             train_partitions.append(subset)
+            train_subs_inds.append(indices)
         for s, p in zip(val_selected, val_uniform):
             s = s.reshape(1, -1)[0]
             p = p.reshape(1, -1)[0]
             indices = np.concatenate((s, p))
             subset = Subset(val_set, indices)
             val_partitions.append(subset)
-    return train_partitions, val_partitions, test_set
+            val_subs_inds.append(indices)
+    return train_partitions, val_partitions, test_set, train_subs_inds, val_subs_inds, test_subs_inds
 
 def discounted_mean(series, gamma=1.0):
     weight = gamma ** np.flip(np.arange(len(series)), axis=0)

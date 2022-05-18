@@ -59,7 +59,7 @@ def _test(net, testloader, device):
 # 2. Federation of the pipeline with Flower
 # #############################################################################
 
-def main(device):
+def main(device, client_id):
     """Create model, load data, define Flower client, start Flower client."""
 
     # Load model
@@ -67,8 +67,8 @@ def main(device):
     net.to(device)
 
     # Load data
-    dataset_loader = get_dataset_loder(config.DATASET, config.CLIENTS, config.DATA_SKEW)
-    train_data, test_data = next(dataset_loader.get_client_data())
+    dataset_loader = get_dataset_loder(config.DATASET, config.CLIENT_NR, config.DATASET_INDS_FILE, config.DATA_SKEW)
+    train_data, test_data = dataset_loader.load_client_data(client_id)
     train_data, test_data = DataLoader(train_data, config.BATCH_SIZE, False), DataLoader(test_data, config.BATCH_SIZE, False)
     rtpt = RTPT('JS', 'HANF_Client', config.ROUNDS)
     rtpt.start()
@@ -79,7 +79,7 @@ def main(device):
         def __init__(self, *args, **kwargs) -> None:
             super().__init__(*args, **kwargs)
             self.date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
-            os.mkdir('./fedex_models/Client_{}'.format(self.date))
+            #os.mkdir('./fedex_models/Client_{}'.format(self.date))
             self.writer = SummaryWriter("./runs/Client_{}".format(self.date))
             self.hyperparameters = Hyperparameters(config.HYPERPARAM_CONFIG_NR)
             self.hyperparameters.read_from_csv(config.HYPERPARAM_FILE)
@@ -119,7 +119,6 @@ def main(device):
             after_loss, _ = _test(net, test_data, device)
             model_params = self.get_parameters()
             rtpt.step()
-            torch.save(net, "./fedex_models/Client_{}/net_round_{}".format(self.date, self.epoch))
             self.epoch += 1
             return model_params, len(train_data), {'hidx': self.hidx, 'before': before_loss, 'after': after_loss}
 
@@ -133,6 +132,7 @@ def main(device):
             # obtain new learning rate for this batch
             distribution = torch.distributions.Categorical(torch.FloatTensor(self.distribution))
             hyp_idx = distribution.sample().item()
+            print(hyp_idx)
             hyp_config = self.hyperparameters[hyp_idx]
             return hyp_config, hyp_idx
 
@@ -143,7 +143,8 @@ def main(device):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--gpu', default='0', type=str)
+    parser.add_argument('--id', type=int)
 
     args = parser.parse_args()
     device = torch.device('cuda:{}'.format(args.gpu))
-    main(device)
+    main(device, args.id)
