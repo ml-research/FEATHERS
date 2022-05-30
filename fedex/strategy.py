@@ -49,17 +49,17 @@ def model_improved(results, weights):
     return (avg_after - avg_before) < 0
 
 
-class HANFStrategy(fl.server.strategy.FedAvg):
+class FedexStrategy(fl.server.strategy.FedAvg):
 
     def __init__(self, fraction_fit, fraction_eval, initial_net, 
                 log_dir='./runs/', discount_factor=0.9, use_gain_avg=False, **args) -> None:
         """
-        Intitialize the HANF strategy used by flwr to aggregation of model parameters.
+        Intitialize the Fedex strategy used by flwr to aggregation of model parameters.
 
         Args:
             fraction_fit (_type_): Fraction of clients used for fit
             fraction_eval (_type_): Fraction of clients used for evaluation
-            initial_net (_type_): Initial network to be tuned by HANF
+            initial_net (_type_): Initial network to be tuned by Fedex
             log_dir (str, optional): Directory where tensorboard-logs are stored. Defaults to './runs/'.
             epsilon (float, optional): Maximum value the distribution over hyperparameters can take before being placed in a simplex. Defaults to 0.8.
             beta (int, optional): Strength of how much values are emphasized which are around those values in the distribution whose probability > epsilon.
@@ -85,7 +85,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.test_loader = DataLoader(self.test_data, batch_size=config.BATCH_SIZE, pin_memory=True, num_workers=2)
         self.current_round = 1
         self.writer = SummaryWriter(log_dir)
-        self.rtpt = RTPT('JS', 'HANF_Server', config.ROUNDS)
+        self.rtpt = RTPT('JS', 'Fedex_Server', config.ROUNDS)
         self.rtpt.start()
         self.distribution_history = []
         self.gain_history = [] # initialize with [0] to avoid nan-values in discounted mean
@@ -135,7 +135,6 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         df = pd.DataFrame(rh)
         df.to_csv('gain_history.csv')
 
-        # update distribution NOTE: Activate again for full HANF!
         gains = self.compute_gains(weights, results)
         self.update_distribution(gains, weights)
         

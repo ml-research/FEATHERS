@@ -1,48 +1,8 @@
 # HANF (Hyperparameter and Neural Architecture Search in Federated Learning)
+This repository contains the code to our corresponding paper [HANF: Hyperparameter And Neural Architecture Search in Federated Learning](https://openreview.net/forum?id=K58leu0H0CG).
+There are two sub-directories: `hanf` and `fedex`. `hanf` contains the implementation of HANF, `fedex` contains an implementation of [Fedex](https://arxiv.org/abs/2106.04502).
 
-## Experiments for Paper (Search)
-### iid
-| Dataset       | Number of Clients | Reult   |
-|---------------|-------------------|---------|
-| FashionMNIST  | 2                 | 5/5     |
-| FashionMNIST  | 5                 | 5/5     |
-| FashionMNIST  | 10                | 0/5     |
-| CIFAR10       | 2                 | 5/5     |
-| CIFAR10       | 5                 | 5/5     |
-| CIFAR10       | 10                | 0/5     |
-
-### non-iid (label skew)
-| Dataset       | Number of Clients | Reult   |
-|---------------|-------------------|---------|
-| FashionMNIST  | 2                 | 5/5     |
-| FashionMNIST  | 5                 | 5/5     |
-| FashionMNIST  | 10                | 0/5     |
-| CIFAR10       | 2                 | 5/5     |
-| CIFAR10       | 5                 | 5/5     |
-| CIFAR10       | 10                | 0/5     |
-
-## Experiments for Paper (Validation)
-### iid
-| Dataset       | Number of Clients | Reult   |
-|---------------|-------------------|---------|
-| FashionMNIST  | 2                 | 2/2     |
-| FashionMNIST  | 5                 | 2/2     |
-| FashionMNIST  | 10                | 0/5     |
-| CIFAR10       | 2                 | 2/2     |
-| CIFAR10       | 5                 | 2/2     |
-| CIFAR10       | 10                | 0/5     |
-
-### non-iid (label skew)
-| Dataset       | Number of Clients | Reult   |
-|---------------|-------------------|---------|
-| FashionMNIST  | 2                 | 2/2     |
-| FashionMNIST  | 5                 | 2/2     |
-| FashionMNIST  | 10                | 0/5     |
-| CIFAR10       | 2                 | 0/2     |
-| CIFAR10       | 5                 | 2/2     |
-| CIFAR10       | 10                | 0/5     |
-
-## Setting up Experiments
+## Setting up HANF-Experiments
 The following shows how to run the two phases of our experiments, i.e. the Search Phase where we try to identify a good neural architecture and the Evaluation Phase where we use the cells found by the Search Phase to evaluate their performance within a bigger network.
 Here are two templates for the `config.py` and the `hyperparameters.py` respectively:
 
@@ -152,3 +112,8 @@ First run `python server.py --stage search` in a terminal. In a different termin
 
 ### Evaluation Phase
 First run `python server.py --stage valid` in a terminal. In a different terminal you can then run `python clients.py --stage valid` and the experiments will start.
+
+## Setting up Fedex Experiments
+For Fedex the only thing you can configure is the hyperparameter-search space, except for techincal stuff like the ports and GPUs being used in the `config.py`-file inside the `fedex`-directory. This can be done as described for HANF, however this time you have to use the `hyperparameters.py`-file in the `fedex`-directory. Starting the experiment works similar to HANF experiments:
+1. Run the server by `python server.py`
+2. Run the clients by `python clients.py`

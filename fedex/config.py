@@ -12,14 +12,11 @@ DATASET = 'fmnist' # dataset to use. Alternatives: cifar10
 CLIENT_NR = 5
 MIN_TRAIN_CLIENTS = 5 # min. number of clients used during fit
 MIN_VAL_CLIENTS = 5 # min. number of clients used during evaluation
-REINIT = False # reinitailize model if no improvement was made
 
 # model initilization parameters
 CLASSES = 10 # number of output-classes
-CELL_NR = 20 # number of cells the search space consists of (if search phase). Else number of cells of the network
 IN_CHANNELS = 3 # mumber of input-channels (e.g. 3 for rgb-images)
 OUT_CHANNELS = 6 # number of output-channels
-NODE_NR = 7 # number of nodes per cell
 
 PORT = '8021'
 GPUS = [7] # GPUs to use

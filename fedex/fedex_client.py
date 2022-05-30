@@ -7,13 +7,12 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from utils import get_dataset_loder
-from fedex_model import NetworkCIFAR, FMNISTCNN, CIFARCNN
+from fedex_model import FMNISTCNN, CIFARCNN
 from rtpt import RTPT
 import numpy as np
 from tensorboardX import SummaryWriter
 from datetime import datetime as dt
 import config
-from genotypes import GENOTYPE
 import argparse
 from hyperparameters import Hyperparameters
 
@@ -63,7 +62,6 @@ def main(device, client_id):
     """Create model, load data, define Flower client, start Flower client."""
 
     # Load model
-    #net = NetworkCIFAR(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, False, GENOTYPE, device, config.IN_CHANNELS)
     if config.DATASET == 'cifar10':
         net = CIFARCNN(config.IN_CHANNELS, config.OUT_CHANNELS, config.CLASSES)
     elif config.DATASET == 'fmnist':
