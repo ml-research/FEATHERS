@@ -14,6 +14,10 @@ from scipy.special import logsumexp
 from numpy.linalg import norm
 import config
 from hyperparameters import Hyperparameters
+import logging
+import sys
+import os
+from datetime import datetime as dt
 
 DEVICE = torch.device("cuda:{}".format(config.SERVER_GPU))
 
@@ -27,7 +31,7 @@ def _test(net, testloader, writer, round):
             #feats = feats.type(torch.FloatTensor)
             #labels = labels.type(torch.LongTensor)
             feats, labels = feats.to(DEVICE), labels.to(DEVICE)
-            preds, _ = net(feats)
+            preds = net(feats)
             writer.add_histogram('logits', preds, round)
             loss += criterion(preds, labels).item()
             _, predicted = torch.max(preds.data, 1)
@@ -85,6 +89,19 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.rtpt.start()
         self.distribution_history = []
         self.gain_history = [] # initialize with [0] to avoid nan-values in discounted mean
+        self.log_gain_hist = []
+
+        # logging (also logs genotypes)
+        self.date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
+        self.log_format = '%(asctime)s %(message)s'
+        logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+        format=self.log_format, datefmt='%m/%d %I:%M:%S %p')
+        log_prefix = 'run_{}'
+        if not os.path.exists('./models/' + log_prefix.format(self.date)):
+            os.mkdir('./models/' + log_prefix.format(self.date))
+        fh = logging.FileHandler(os.path.join('./models/' + log_prefix.format(self.date), 'log.txt'))
+        fh.setFormatter(logging.Formatter(self.log_format))
+        logging.getLogger().addHandler(fh)
 
     def aggregate_fit(
         self,
@@ -114,6 +131,9 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         dh = np.array(self.distribution_history)
         df = pd.DataFrame(dh)
         df.to_csv('distribution_history.csv')
+        rh = np.array(self.log_gain_hist)
+        df = pd.DataFrame(rh)
+        df.to_csv('gain_history.csv')
 
         # update distribution NOTE: Activate again for full HANF!
         gains = self.compute_gains(weights, results)
@@ -214,6 +234,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             gains.append(client_gains)
         gains = np.array(gains)
         gains = gains.sum(axis=0)
+        self.log_gain_hist.append(gains)
         return gains
     
     def update_distribution(self, gains, weights):

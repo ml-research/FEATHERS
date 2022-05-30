@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from utils import get_dataset_loder
-from fedex_model import NetworkCIFAR
+from fedex_model import NetworkCIFAR, FMNISTCNN, CIFARCNN
 from rtpt import RTPT
 import numpy as np
 from tensorboardX import SummaryWriter
@@ -27,7 +27,7 @@ def train(net, trainloader, writer, epoch, optimizer, device):
     for i, (images, labels) in enumerate(trainloader):
         images, labels = images.to(device), labels.to(device)
         optimizer.zero_grad()
-        logits, _ = net(images)
+        logits = net(images)
         writer.add_histogram('logits', logits, i*epoch)
         loss = criterion(logits, labels)
         loss.backward()
@@ -46,7 +46,7 @@ def _test(net, testloader, device):
             #feats = feats.type(torch.FloatTensor)
             #labels = labels.type(torch.LongTensor)
             feats, labels = feats.to(device), labels.to(device)
-            preds, _ = net(feats)
+            preds = net(feats)
             loss += criterion(preds, labels).item()
             _, predicted = torch.max(preds.data, 1)
             total += labels.size(0)
@@ -63,7 +63,11 @@ def main(device, client_id):
     """Create model, load data, define Flower client, start Flower client."""
 
     # Load model
-    net = NetworkCIFAR(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, False, GENOTYPE, device, config.IN_CHANNELS)
+    #net = NetworkCIFAR(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, False, GENOTYPE, device, config.IN_CHANNELS)
+    if config.DATASET == 'cifar10':
+        net = CIFARCNN(config.IN_CHANNELS, config.OUT_CHANNELS, config.CLASSES)
+    elif config.DATASET == 'fmnist':
+        net = FMNISTCNN()
     net.to(device)
 
     # Load data
@@ -101,6 +105,8 @@ def main(device, client_id):
                 g['lr'] = self.hyperparam_config['learning_rate']
                 g['momentum'] = self.hyperparam_config['momentum']
                 g['weight_decay'] = self.hyperparam_config['weight_decay']
+
+            net.dropout = self.hyperparam_config['dropout']
             
             params_dict = zip(net.state_dict().keys(), parameters)
             state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
@@ -114,7 +120,7 @@ def main(device, client_id):
         def fit(self, parameters, config):
             self.set_parameters_train(parameters, config)
             before_loss, _ = _test(net, test_data, device)
-            net.drop_path_prob = self.hyperparam_config['dropout']
+            #net.drop_path_prob = self.hyperparam_config['dropout']
             train(net, train_data, self.writer, self.epoch, self.optim, device)
             after_loss, _ = _test(net, test_data, device)
             model_params = self.get_parameters()
@@ -124,7 +130,7 @@ def main(device, client_id):
 
         def evaluate(self, parameters, config):
             self.set_parameters_evaluate(parameters)
-            net.drop_path_prob = self.hyperparam_config['dropout']
+            #net.drop_path_prob = self.hyperparam_config['dropout']
             loss, accuracy = _test(net, test_data, device)
             return float(loss), len(test_data), {"accuracy": float(accuracy)}
 

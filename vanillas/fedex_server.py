@@ -1,7 +1,7 @@
 import flwr as fl
 from hanf_strategy import HANFStrategy
 import torch.nn as nn
-from fedex_model import NetworkCIFAR
+from fedex_model import NetworkCIFAR, CIFARCNN, FMNISTCNN
 import argparse
 import config
 from genotypes import GENOTYPE
@@ -9,8 +9,12 @@ import torch
 from helpers import prepare_log_dirs
 
 def start_server(log_dir, rounds, dataset):
-    device = torch.device("cuda:{}".format(config.SERVER_GPU))
-    net = NetworkCIFAR(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, False, GENOTYPE, device, config.IN_CHANNELS)
+    #device = torch.device('cuda:{}'.format(config.SERVER_GPU))
+    #net = NetworkCIFAR(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, False, GENOTYPE, device, config.IN_CHANNELS)
+    if config.DATASET == 'cifar10':
+        net = CIFARCNN(config.IN_CHANNELS, config.OUT_CHANNELS, config.CLASSES)
+    elif config.DATASET == 'fmnist':
+        net = FMNISTCNN()
 
     prepare_log_dirs()
     
