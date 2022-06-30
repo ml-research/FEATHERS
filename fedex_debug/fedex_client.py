@@ -46,7 +46,7 @@ def _test(net, testloader, device):
             #feats = feats.type(torch.FloatTensor)
             #labels = labels.type(torch.LongTensor)
             feats, labels = feats.to(device), labels.to(device)
-            preds = net(feats)
+            preds, _ = net(feats)
             loss += criterion(preds, labels).item()
             _, predicted = torch.max(preds.data, 1)
             total += labels.size(0)

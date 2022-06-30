@@ -15,6 +15,7 @@ def start_server(log_dir, rounds, dataset):
     #    net = FMNISTCNN()
     device = torch.device(f'cuda:{config.SERVER_GPU}') if torch.cuda.is_available() else torch.device('cpu')
     net = NetworkCIFAR(config.OUT_CHANNELS, config.CLASSES, config.CELLS, False, GENOTYPE, device, config.IN_CHANNELS)
+    
 
     prepare_log_dirs()
     

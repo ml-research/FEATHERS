@@ -15,9 +15,9 @@ MIN_VAL_CLIENTS = 5 # min. number of clients used during evaluation
 
 # model initilization parameters
 CLASSES = 10 # number of output-classes
-IN_CHANNELS = 3 # mumber of input-channels (e.g. 3 for rgb-images)
-OUT_CHANNELS = 36 # number of output-channels
-CELLS = 20
+IN_CHANNELS = 1 # mumber of input-channels (e.g. 3 for rgb-images)
+OUT_CHANNELS = 16 # number of output-channels
+CELLS = 12
 
 PORT = '8021'
 GPUS = [7] # GPUs to use

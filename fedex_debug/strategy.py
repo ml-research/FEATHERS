@@ -19,7 +19,7 @@ import sys
 import os
 from datetime import datetime as dt
 
-DEVICE = torch.device("cuda:{}".format(config.SERVER_GPU))
+DEVICE = torch.device("cuda:{}".format(config.SERVER_GPU)) if torch.cuda.is_available() else torch.device('cpu')
 
 def _test(net, testloader, writer, round):
     """Validate the network on the entire test set."""
@@ -31,7 +31,7 @@ def _test(net, testloader, writer, round):
             #feats = feats.type(torch.FloatTensor)
             #labels = labels.type(torch.LongTensor)
             feats, labels = feats.to(DEVICE), labels.to(DEVICE)
-            preds = net(feats)
+            preds, _ = net(feats)
             writer.add_histogram('logits', preds, round)
             loss += criterion(preds, labels).item()
             _, predicted = torch.max(preds.data, 1)
