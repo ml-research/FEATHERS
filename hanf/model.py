@@ -3,7 +3,6 @@ import torch.nn as nn
 from operations import *
 from utils import drop_path
 
-
 class Cell(nn.Module):
 
   def __init__(self, genotype, C_prev_prev, C_prev, C, reduction, reduction_prev, device):

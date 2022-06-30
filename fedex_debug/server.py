@@ -1,16 +1,20 @@
 import flwr as fl
 from strategy import FedexStrategy
 import torch.nn as nn
-from fedex_model import CIFARCNN, FMNISTCNN
+from fedex_model import CIFARCNN, FMNISTCNN, NetworkCIFAR
 import argparse
 import config
 from helpers import prepare_log_dirs
+from genotype import GENOTYPE
+import torch
 
 def start_server(log_dir, rounds, dataset):
-    if config.DATASET == 'cifar10':
-        net = CIFARCNN(config.IN_CHANNELS, config.OUT_CHANNELS, config.CLASSES)
-    elif config.DATASET == 'fmnist':
-        net = FMNISTCNN()
+    #if config.DATASET == 'cifar10':
+    #    net = CIFARCNN(config.IN_CHANNELS, config.OUT_CHANNELS, config.CLASSES)
+    #elif config.DATASET == 'fmnist':
+    #    net = FMNISTCNN()
+    device = torch.device(f'cuda:{config.SERVER_GPU}') if torch.cuda.is_available() else torch.device('cpu')
+    net = NetworkCIFAR(config.OUT_CHANNELS, config.CLASSES, config.CELLS, False, GENOTYPE, device, config.IN_CHANNELS)
 
     prepare_log_dirs()
     
