@@ -41,6 +41,9 @@ class Architect(object):
     loss.backward()
 
   def _backward_step_unrolled(self, input_train, target_train, input_valid, target_valid, eta, network_optimizer):
+    """
+      NOTE: If architecture update is computed this way, we may lose DP-capabilities!
+    """
     unrolled_model = self._compute_unrolled_model(input_train, target_train, eta, network_optimizer)
     unrolled_loss = unrolled_model._loss(input_valid, target_valid)
 
