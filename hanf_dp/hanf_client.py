@@ -107,10 +107,11 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             self.train_loader = DataLoader(train_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
             self.val_loader = DataLoader(test_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
             self.model, self.optimizer, self.train_loader = privacy_engine.make_private(module=model, 
-                                        optimizer=self.optimizer, data_loader=self.train_loader, noise_multiplier=1.2)
+                                        optimizer=self.optimizer, data_loader=self.train_loader, noise_multiplier=1.2, max_grad_norm=1.)
             _, arch_optim, self.val_loader = privacy_engine.make_private(module=model, 
-                                        optimizer=arch_optim, data_loader=self.val_loader, noise_multiplier=1.2)
+                                        optimizer=arch_optim, data_loader=self.val_loader, noise_multiplier=1.2,  max_grad_norm=1.)
             self.model = ModuleValidator.fix(self.model) # required to replace modules not supported by opacus (e.g. BatchNorm)
+            print(ModuleValidator.validate(self.model, strict=False))
             self.model = self.model.to(device)
             self.architect = Architect(self.model, arch_optim, 0.9, 1e-3, device)
 

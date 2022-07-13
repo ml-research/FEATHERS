@@ -4,7 +4,26 @@ import torch.nn.functional as F
 from operations import *
 from genotypes import PRIMITIVES
 from genotypes import Genotype
+from opacus.grad_sample import register_grad_sampler
+from typing import Dict
 
+@register_grad_sampler(nn.Linear)
+def compute_linear_grad_sample(
+    layer: nn.Linear, activations: torch.Tensor, backprops: torch.Tensor
+) -> Dict[nn.Parameter, torch.Tensor]:
+    """
+    Computes per sample gradients for ``nn.Linear`` layer
+    Args:
+        layer: Layer
+        activations: Activations
+        backprops: Backpropagations
+    """
+    gs = torch.einsum("n...i,n...j->nij", backprops, activations)
+    ret = {layer.weight: gs}
+    if layer.bias is not None:
+        ret[layer.bias] = torch.einsum("n...k->nk", backprops)
+
+    return ret
 
 class MixedOp(nn.Module):
 
@@ -14,7 +33,7 @@ class MixedOp(nn.Module):
     for primitive in PRIMITIVES:
       op = OPS[primitive](C, stride, False)
       if 'pool' in primitive:
-        op = nn.Sequential(op, nn.BatchNorm2d(C, affine=False))
+        op = nn.Sequential(op, nn.GroupNorm(num_groups=1, num_channels=C, affine=False))
       self._ops.append(op)
 
   def forward(self, x, weights):
@@ -72,7 +91,7 @@ class Network(nn.Module):
     C_curr = stem_multiplier*C
     self.stem = nn.Sequential(
       nn.Conv2d(in_channels, C_curr, 3, padding=1, bias=False),
-      nn.BatchNorm2d(C_curr)
+      nn.GroupNorm(num_groups=1, num_channels=C_curr),
     )
  
     C_prev_prev, C_prev, C_curr = C_curr, C_curr, C
