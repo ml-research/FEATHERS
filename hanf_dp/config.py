@@ -2,7 +2,7 @@
 ROUNDS = 120 # nr. of communication rounds
 ALPHA = 0.3
 HYPERPARAM_CONFIG_NR = 120 # size of hyperparameter search space
-BATCH_SIZE = 64
+BATCH_SIZE = 1
 
 # logging
 LOG_DIR = './runs/'
@@ -22,10 +22,14 @@ OUT_CHANNELS = 16 # number of output-channels
 NODE_NR = 7 # number of nodes per cell
 
 PORT = '8042'
-GPUS = [2, 3] # GPUs to use
-SERVER_GPU = 2
+GPUS = [14] # GPUs to use
+SERVER_GPU = 15
 
 DATA_SKEW = 0 # skew of labels. 0 = no skew, 1 only some clients hold some labels
+
+# Differential Privacy
+STD = 1.2
+MAX_GRAD_NORM = 2.
 
 # validation stage
 DROP_PATH_PROB = 0.2 # probability of dropping a path in cell, similar to dropout

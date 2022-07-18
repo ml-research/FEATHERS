@@ -24,7 +24,10 @@ def start_server(log_dir, rounds, dataset):
         fraction_fit=0.5,
         fraction_eval=0.5,
         initial_net=net,
-        log_dir=log_dir
+        log_dir=log_dir,
+        min_fit_clients=config.MIN_TRAIN_CLIENTS,
+        min_eval_clients=config.MIN_VAL_CLIENTS,
+        min_available_clients=config.CLIENT_NR,
     )
 
     # Start server
@@ -38,8 +41,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--rounds', type=int, default=60)
     parser.add_argument('--log-dir')
-    parser.add_argument('--dataset', type=str, default='fmnist')
 
     args = parser.parse_args()
 
-    start_server(args.log_dir, config.ROUNDS, args.dataset)
+    start_server(args.log_dir, config.ROUNDS, config.DATASET)

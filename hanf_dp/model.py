@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from operations import *
 from utils import drop_path
+from opacus.grad_sample import register_grad_sampler
+from typing import Dict
 
 class Cell(nn.Module):
 
@@ -213,3 +215,39 @@ class NetworkImageNet(nn.Module):
     logits = self.classifier(out.view(out.size(0), -1))
     return logits, logits_aux
 
+
+@register_grad_sampler(NetworkCIFAR)
+def compute_linear_grad_sample(
+    layer: nn.Linear, activations: torch.Tensor, backprops: torch.Tensor
+) -> Dict[nn.Parameter, torch.Tensor]:
+    """
+    Computes per sample gradients for ``nn.Linear`` layer
+    Args:
+        layer: Layer
+        activations: Activations
+        backprops: Backpropagations
+    """
+    gs = torch.einsum("n...i,n...j->nij", backprops, activations)
+    ret = {layer.weight: gs}
+    if layer.bias is not None:
+        ret[layer.bias] = torch.einsum("n...k->nk", backprops)
+
+    return ret
+
+@register_grad_sampler(NetworkImageNet)
+def compute_linear_grad_sample(
+    layer: nn.Linear, activations: torch.Tensor, backprops: torch.Tensor
+) -> Dict[nn.Parameter, torch.Tensor]:
+    """
+    Computes per sample gradients for ``nn.Linear`` layer
+    Args:
+        layer: Layer
+        activations: Activations
+        backprops: Backpropagations
+    """
+    gs = torch.einsum("n...i,n...j->nij", backprops, activations)
+    ret = {layer.weight: gs}
+    if layer.bias is not None:
+        ret[layer.bias] = torch.einsum("n...k->nk", backprops)
+
+    return ret

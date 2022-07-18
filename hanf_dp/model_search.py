@@ -7,23 +7,6 @@ from genotypes import Genotype
 from opacus.grad_sample import register_grad_sampler
 from typing import Dict
 
-@register_grad_sampler(nn.Linear)
-def compute_linear_grad_sample(
-    layer: nn.Linear, activations: torch.Tensor, backprops: torch.Tensor
-) -> Dict[nn.Parameter, torch.Tensor]:
-    """
-    Computes per sample gradients for ``nn.Linear`` layer
-    Args:
-        layer: Layer
-        activations: Activations
-        backprops: Backpropagations
-    """
-    gs = torch.einsum("n...i,n...j->nij", backprops, activations)
-    ret = {layer.weight: gs}
-    if layer.bias is not None:
-        ret[layer.bias] = torch.einsum("n...k->nk", backprops)
-
-    return ret
 
 class MixedOp(nn.Module):
 
@@ -131,10 +114,6 @@ class Network(nn.Module):
     logits = self.classifier(out.view(out.size(0),-1))
     return logits
 
-  def _loss(self, input, target):
-    logits = self(input)
-    return self._criterion(logits, target) 
-
   def _initialize_alphas(self):
     k = sum(1 for i in range(self._steps) for n in range(2+i))
     num_ops = len(PRIMITIVES)
@@ -180,3 +159,25 @@ class Network(nn.Module):
     )
     return genotype
 
+@register_grad_sampler(Network)
+def compute_linear_grad_sample(
+    layer: Network, activations: torch.Tensor, backprops: torch.Tensor
+) -> Dict[nn.Parameter, torch.Tensor]:
+    """
+    Computes per sample gradients for ``nn.Linear`` layer
+    Args:
+        layer: Layer
+        activations: Activations
+        backprops: Backpropagations
+    """
+    print(backprops.shape)
+    print(activations.shape)
+    # TODO: We receive dL/dN where N is our network and input into the network, i.e. we would have to compute each gradient manually.
+    #   How can we circumvent this? Probably we have to break down the cell-structure and implement the cells directly in the network(?)
+    # TODO: Try to register Cell grad_sampler and see if it works out. 
+    gs = torch.einsum("ni,n...kj->nkj", backprops, activations)
+    ret = {layer.classifier.weight: gs}
+    if layer.classifier.bias is not None:
+        ret[layer.classifier.bias] = torch.einsum("n...k->nk", backprops)
+
+    return ret

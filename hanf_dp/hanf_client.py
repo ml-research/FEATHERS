@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from turtle import rt
+from copy import deepcopy
 import warnings
 
 import flwr as fl
@@ -43,36 +43,30 @@ def _test(net, testloader, device):
     accuracy = correct / total
     return loss, accuracy
 
-def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, device):
+def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, std, max_grad_norm, device):
 
-  with BatchMemoryManager(data_loader=train_queue, 
-                        max_physical_batch_size=128, optimizer=optimizer) as bmm:
-
-    for step, (input, target) in enumerate(bmm):
+    for step, (input, target) in enumerate(train_queue):
         model.train()
-
         input = input.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
-
         # get a random minibatch from the search queue with replacement
         input_search, target_search = next(iter(valid_queue))
         input_search = input_search.to(device, non_blocking=True)
         target_search = target_search.to(device, non_blocking=True)
 
-        architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=False)
-
+        architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=False, std=std, max_grad_norm=max_grad_norm)
+        
         optimizer.zero_grad()
         logits = model(input)
         loss = criterion(logits, target)
-
         loss.backward()
-        nn.utils.clip_grad_norm(model.parameters(), 5.)
-        optimizer.step()
+        nn.utils.clip_grad_norm(model.parameters(), max_grad_norm)
 
-        if step % 50 == 0:
-            print("Step %03d" % step)
+        for p in model.parameters():
+            p.grad += torch.normal(mean=0, std=std, size=p.shape).to(device)
+        optimizer.step()
   
-  return model
+    return model
 
 # #############################################################################
 # 2. Federation of the pipeline with Flower
@@ -85,7 +79,6 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
     data_loader = get_dataset_loder(dataset, num_clients, config.DATASET_INDS_FILE, config.DATA_SKEW)
     train_data, test_data = data_loader.load_client_data(client_id)
     date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
-    writer = SummaryWriter("./runs/Client_{}".format(date))
     rtpt = RTPT('JS', 'HANF_Client', EPOCHS)
     rtpt.start()
 
@@ -99,21 +92,16 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             self.hyperparameters.read_from_csv(config.HYPERPARAM_FILE)
             self.criterion = torch.nn.CrossEntropyLoss()
             self.criterion = self.criterion.to(device)
-            model = Network(out_channels, classes, cell_nr, self.criterion, device, in_channels=input_channels)
-            privacy_engine = PrivacyEngine()
-            self.optimizer = torch.optim.SGD(model.parameters(), 0.01, 0.9, 3e-4)
-            arch_optim = torch.optim.Adam(model.arch_parameters(),
+            self.model = Network(out_channels, classes, cell_nr, self.criterion, device, in_channels=input_channels)
+            self.optimizer = torch.optim.SGD(self.model.parameters(), 0.01, 0.9, 3e-4)
+            arch_optim = torch.optim.Adam(self.model.arch_parameters(),
                             lr=3e-4, betas=(0.5, 0.999), weight_decay=1e-3)
             self.train_loader = DataLoader(train_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
             self.val_loader = DataLoader(test_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
-            self.model, self.optimizer, self.train_loader = privacy_engine.make_private(module=model, 
-                                        optimizer=self.optimizer, data_loader=self.train_loader, noise_multiplier=1.2, max_grad_norm=1.)
-            _, arch_optim, self.val_loader = privacy_engine.make_private(module=model, 
-                                        optimizer=arch_optim, data_loader=self.val_loader, noise_multiplier=1.2,  max_grad_norm=1.)
-            self.model = ModuleValidator.fix(self.model) # required to replace modules not supported by opacus (e.g. BatchNorm)
-            print(ModuleValidator.validate(self.model, strict=False))
+            #self.model = ModuleValidator.fix(self.model) # required to replace modules not supported by opacus (e.g. BatchNorm)
+            #ModuleValidator.validate(self.model, strict=False)
             self.model = self.model.to(device)
-            self.architect = Architect(self.model, arch_optim, 0.9, 1e-3, device)
+            self.architect = Architect(self.model, arch_optim, 0.9, 1e-3, self.criterion, device)
 
         def get_parameters(self):
             return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
@@ -136,15 +124,15 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
             self.model.load_state_dict(state_dict, strict=True)
 
-        def fit(self, parameters, config):
-            self.set_parameters_train(parameters, config)
+        def fit(self, parameters, flwr_config):
+            self.set_parameters_train(parameters, flwr_config)
             before_loss, _ = _test(self.model, self.val_loader, device)
             for e in range(EPOCHS):
                 rtpt.step()
                 self.epoch += 1
                 self.model = train(self.train_loader, self.val_loader, self.model,
                                                  self.architect, self.criterion, self.optimizer, 
-                                                 self.hyperparam_config['learning_rate'], device)
+                                                 self.hyperparam_config['learning_rate'], config.STD, config.MAX_GRAD_NORM, device)
             after_loss, _ = _test(self.model, self.val_loader, device)
             model_params = self.get_parameters()
             return model_params, len(train_data), {'hidx': int(self.hidx), 'before': float(before_loss), 'after': float(after_loss)}

@@ -10,15 +10,17 @@ def _concat(xs):
 
 class Architect(object):
 
-  def __init__(self, model, arch_optimizer, model_momentum, model_weight_decay, device):
+  def __init__(self, model, arch_optimizer, model_momentum, model_weight_decay, loss_fn, device):
     self.device = device
     self.network_momentum = model_momentum
     self.network_weight_decay = model_weight_decay
     self.model = model
     self.optimizer = arch_optimizer
+    self.loss_fn = loss_fn
 
   def _compute_unrolled_model(self, input, target, eta, network_optimizer):
-    loss = self.model._loss(input, target)
+    pred = self.model(input)
+    loss = self.loss_fn(pred, target)
     theta = _concat(self.model.parameters()).data
     try:
       moment = _concat(network_optimizer.state[v]['momentum_buffer'] for v in self.model.parameters()).mul_(self.network_momentum)
@@ -28,24 +30,29 @@ class Architect(object):
     unrolled_model = self._construct_model_from_theta(theta.sub(eta, moment+dtheta))
     return unrolled_model
 
-  def step(self, input_train, target_train, input_valid, target_valid, eta, network_optimizer, unrolled):
+  def step(self, input_train, target_train, input_valid, target_valid, eta, network_optimizer, unrolled, std, max_grad_norm):
     self.optimizer.zero_grad()
     if unrolled:
-        self._backward_step_unrolled(input_train, target_train, input_valid, target_valid, eta, network_optimizer)
+        self._backward_step_unrolled(input_train, target_train, input_valid, target_valid, eta, network_optimizer, std=std, max_grad_norm=max_grad_norm)
     else:
-        self._backward_step(input_valid, target_valid)
+        self._backward_step(input_valid, target_valid, std, max_grad_norm)
     self.optimizer.step()
 
-  def _backward_step(self, input_valid, target_valid):
-    loss = self.model._loss(input_valid, target_valid)
+  def _backward_step(self, input_valid, target_valid, std, max_grad_norm):
+    pred = self.model(input_valid)
+    loss = self.loss_fn(pred, target_valid)
     loss.backward()
 
-  def _backward_step_unrolled(self, input_train, target_train, input_valid, target_valid, eta, network_optimizer):
-    """
-      NOTE: If architecture update is computed this way, we may lose DP-capabilities!
-    """
+    torch.nn.utils.clip_grad_norm_(self.model.arch_parameters(), max_grad_norm)
+
+    # add noise for DP
+    for p in self.model.arch_parameters():
+      p.grad += torch.normal(mean=0, std=std, size=p.shape).to(self.device)
+
+  def _backward_step_unrolled(self, input_train, target_train, input_valid, target_valid, eta, network_optimizer, std, max_grad_norm):
     unrolled_model = self._compute_unrolled_model(input_train, target_train, eta, network_optimizer)
-    unrolled_loss = unrolled_model._loss(input_valid, target_valid)
+    pred = unrolled_model(input_valid)
+    unrolled_loss = self.loss_fn(pred, target_valid)
 
     unrolled_loss.backward()
     dalpha = [v.grad for v in unrolled_model.arch_parameters()]
@@ -60,6 +67,8 @@ class Architect(object):
         v.grad = Variable(g.data)
       else:
         v.grad.data.copy_(g.data)
+      torch.nn.utils.clip_grad_norm_(v, max_norm=max_grad_norm)
+      v.grad += torch.normal(mean=0, std=std, size=v.shape).to(self.device)
 
   def _construct_model_from_theta(self, theta):
     model_new = self.model.new()
@@ -80,12 +89,15 @@ class Architect(object):
     R = r / _concat(vector).norm()
     for p, v in zip(self.model.parameters(), vector):
       p.data.add_(R, v)
-    loss = self.model._loss(input, target)
+    
+    pred = self.model(input)
+    loss = self.loss_fn(pred, target)
     grads_p = torch.autograd.grad(loss, self.model.arch_parameters())
 
     for p, v in zip(self.model.parameters(), vector):
       p.data.sub_(2*R, v)
-    loss = self.model._loss(input, target)
+    pred = self.model(input)
+    loss = self.loss_fn(pred, target)
     grads_n = torch.autograd.grad(loss, self.model.arch_parameters())
 
     for p, v in zip(self.model.parameters(), vector):

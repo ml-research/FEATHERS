@@ -27,7 +27,7 @@ def train(net, trainloader, writer, epoch, optimizer, device):
     for i, (images, labels) in enumerate(trainloader):
         images, labels = images.to(device), labels.to(device)
         optimizer.zero_grad()
-        logits = net(images)
+        logits, _ = net(images)
         writer.add_histogram('logits', logits, i*epoch)
         loss = criterion(logits, labels)
         loss.backward()
