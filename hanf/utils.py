@@ -9,107 +9,79 @@ import torchvision
 import math
 import json
 
-class FashionMNISTLoader:
+class Loader:
 
     def __init__(self, n_clients, indspath, skew=0) -> None:
         self.n_clients = n_clients
         self.skew = skew
         self.indspath = indspath
+        self.train_data = None
+        self.val_data = None
+
+    def partition(self):
+        """
+        Loads the Fashion-MNIST dataset
+        """
+        self.train_partitions, self.val_partitions, self.test_set, train_inds, val_inds, test_inds = partition_skewed(self.train_data, self.val_data, self.n_clients, skew=self.skew)
+        train_dict, val_dict = {}, {}
+        for i, inds in enumerate(train_inds):
+            train_dict[i] = inds.tolist()
+        for i, inds in enumerate(val_inds):
+            val_dict[i] = inds.tolist()
+        json_dict = {
+            'train': train_dict,
+            'val': val_dict,
+            'test': test_inds.tolist()
+        }
+        with open(self.indspath, 'w+') as f:
+            json.dump(json_dict, f)
+
+    def load_client_data(self, client_id):
+        with open(self.indspath, 'r') as f:
+            inds_dict = json.load(f)
+        train_inds = np.array(inds_dict['train'][str(client_id)])
+        val_inds = np.array(inds_dict['val'][str(client_id)])
+        trainset = Subset(self.train_data, train_inds)
+        valset = Subset(self.val_data, val_inds)
+        return trainset, valset
+
+    def load_server_data(self):
+        with open(self.indspath, 'r') as f:
+            inds_dict = json.load(f)
+        test_inds = np.array(inds_dict['test'])
+        testset = Subset(self.val_data, test_inds)
+        return testset
+         
+    def get_client_data(self):
+        for train, val in zip(self.train_partitions, self.val_partitions):
+            yield train, val
+
+    def get_test(self):
+        return self.test_set
+
+class FashionMNISTLoader(Loader):
+
+    def __init__(self, n_clients, indspath, skew=0) -> None:
+        super().__init__(n_clients, indspath, skew)
         transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize((0,), (1,))])
         self.train_data = torchvision.datasets.FashionMNIST('../../../datasets/femnist/', download=True, train=True, transform=transform)
         self.val_data = torchvision.datasets.FashionMNIST('../../../datasets/femnist/', download=True, train=False, transform=transform)
 
-    def partition(self):
-        """
-        Loads the Fashion-MNIST dataset
-        """
-        self.train_partitions, self.val_partitions, self.test_set, train_inds, val_inds, test_inds = partition_skewed(self.train_data, self.val_data, self.n_clients, skew=self.skew)
-        train_dict, val_dict = {}, {}
-        for i, inds in enumerate(train_inds):
-            train_dict[i] = inds.tolist()
-        for i, inds in enumerate(val_inds):
-            val_dict[i] = inds.tolist()
-        json_dict = {
-            'train': train_dict,
-            'val': val_dict,
-            'test': test_inds.tolist()
-        }
-        with open(self.indspath, 'w+') as f:
-            json.dump(json_dict, f)
-
-    def load_client_data(self, client_id):
-        with open(self.indspath, 'r') as f:
-            inds_dict = json.load(f)
-        train_inds = np.array(inds_dict['train'][str(client_id)])
-        val_inds = np.array(inds_dict['val'][str(client_id)])
-        trainset = Subset(self.train_data, train_inds)
-        valset = Subset(self.val_data, val_inds)
-        return trainset, valset
-
-    def load_server_data(self):
-        with open(self.indspath, 'r') as f:
-            inds_dict = json.load(f)
-        test_inds = np.array(inds_dict['test'])
-        testset = Subset(self.val_data, test_inds)
-        return testset
-         
-    def get_client_data(self):
-        for train, val in zip(self.train_partitions, self.val_partitions):
-            yield train, val
-
-    def get_test(self):
-        return self.test_set
-
-class CIFAR10Loader:
+class CIFAR10Loader(Loader):
 
     def __init__(self, n_clients, indspath, skew=0) -> None:
-        self.n_clients = n_clients
-        self.skew = skew
-        self.indspath = indspath
+        super().__init__(n_clients, indspath, skew)
         transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize((0,), (1,))])
         self.train_data = torchvision.datasets.CIFAR10('../../../datasets/cifar10/', download=True, train=True, transform=transform)
         self.val_data = torchvision.datasets.CIFAR10('../../../datasets/cifar10/', download=True, train=False, transform=transform)
 
-    def partition(self):
-        """
-        Loads the Fashion-MNIST dataset
-        """
-        self.train_partitions, self.val_partitions, self.test_set, train_inds, val_inds, test_inds = partition_skewed(self.train_data, self.val_data, self.n_clients, skew=self.skew)
-        train_dict, val_dict = {}, {}
-        for i, inds in enumerate(train_inds):
-            train_dict[i] = inds.tolist()
-        for i, inds in enumerate(val_inds):
-            val_dict[i] = inds.tolist()
-        json_dict = {
-            'train': train_dict,
-            'val': val_dict,
-            'test': test_inds.tolist()
-        }
-        with open(self.indspath, 'w+') as f:
-            json.dump(json_dict, f)
+class ImageNet(Loader):
 
-    def load_client_data(self, client_id):
-        with open(self.indspath, 'r') as f:
-            inds_dict = json.load(f)
-        train_inds = np.array(inds_dict['train'][str(client_id)])
-        val_inds = np.array(inds_dict['val'][str(client_id)])
-        trainset = Subset(self.train_data, train_inds)
-        valset = Subset(self.val_data, val_inds)
-        return trainset, valset
-
-    def load_server_data(self):
-        with open(self.indspath, 'r') as f:
-            inds_dict = json.load(f)
-        test_inds = np.array(inds_dict['test'])
-        testset = Subset(self.val_data, test_inds)
-        return testset
-         
-    def get_client_data(self):
-        for train, val in zip(self.train_partitions, self.val_partitions):
-            yield train, val
-
-    def get_test(self):
-        return self.test_set
+    def __init__(self, n_clients, indspath, skew=0) -> None:
+        super().__init__(n_clients, indspath, skew)
+        transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize((0,), (1,))])
+        self.train_data = torchvision.datasets.CIFAR10('../../../datasets/imagenet/', download=True, train=True, transform=transform)
+        self.val_data = torchvision.datasets.CIFAR10('../../../datasets/imagenet/', download=True, train=False, transform=transform)
 
 
 def get_dataset_loder(dataset, num_clients, indspath, skew=0):
@@ -117,6 +89,8 @@ def get_dataset_loder(dataset, num_clients, indspath, skew=0):
         return FashionMNISTLoader(num_clients, indspath, skew=skew)
     elif dataset == 'cifar10':
         return CIFAR10Loader(num_clients, indspath, skew=skew)
+    elif dataset == 'imagenet':
+        return ImageNet(num_clients, indspath, skew=skew)
     else:
         raise ValueError('{} is not supported'.format(dataset))
 
