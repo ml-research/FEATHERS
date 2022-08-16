@@ -27,6 +27,7 @@ def start_server_search(rounds):
         min_eval_clients=config.MIN_VAL_CLIENTS,
         min_available_clients=config.CLIENT_NR,
         stage='search',
+        gamma=config.GAMMA,
     )
 
     # Start server
@@ -56,6 +57,7 @@ def start_server_valid(rounds):
         min_eval_clients=config.MIN_VAL_CLIENTS,
         min_available_clients=config.CLIENT_NR,
         stage='valid',
+        gamma=config.GAMMA
     )
 
     # Start server
