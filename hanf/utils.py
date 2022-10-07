@@ -8,6 +8,7 @@ from torch.utils.data import random_split, Subset
 import torchvision
 import math
 import json
+from ..datasets.fraud_detection import FraudDetection
 
 class Loader:
 
@@ -82,6 +83,13 @@ class ImageNet(Loader):
         transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize((0,), (1,))])
         self.train_data = torchvision.datasets.CIFAR10('../../../datasets/imagenet/', download=True, train=True, transform=transform)
         self.val_data = torchvision.datasets.CIFAR10('../../../datasets/imagenet/', download=True, train=False, transform=transform)
+
+class FraudDetection(Loader):
+
+    def __init__(self, n_clients, indspath, skew=0) -> None:
+       super().__init__(n_clients, indspath, skew)
+       self.train_data = FraudDetection('../../../datasets/ccFraud/', train=True)
+       self.val_data = FraudDetection('../../../datasets/ccFraud/', train=False)
 
 
 def get_dataset_loder(dataset, num_clients, indspath, skew=0):
