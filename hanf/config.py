@@ -1,6 +1,7 @@
 # hyperparameter configuration parameters
-ROUNDS = 1500 # nr. of communication rounds
-ALPHA = 0.3
+ROUNDS = 2500 # nr. of communication rounds
+ALPHA = 0.5
+GAMMA = 6
 HYPERPARAM_CONFIG_NR = 120 # size of hyperparameter search space
 BATCH_SIZE = 96
 
@@ -22,7 +23,7 @@ OUT_CHANNELS = 36 # number of output-channels
 NODE_NR = 7 # number of nodes per cell
 
 PORT = '8040'
-GPUS = [2, 3, 4, 5, 6, 7, 8, 9] # GPUs to use
+GPUS = [1, 2, 3, 4, 5, 6, 7, 8, 9] # GPUs to use
 SERVER_GPU = 1
 
 DATA_SKEW = 0 # skew of labels. 0 = no skew, 1 only some clients hold some labels

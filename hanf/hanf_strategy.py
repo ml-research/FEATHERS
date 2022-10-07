@@ -133,11 +133,11 @@ class HANFStrategy(fl.server.strategy.FedAvg):
 
         self.log_round += 1
 
-        if self.current_round % 10 == 0:
-            print("======================= EXPLORING PHASE ======================")
+        if self.current_round % 30 == 0:
             aggregated_weights = deepcopy(self.old_weights)
             if self.current_exploration is None:
                 self._sample_hyperparams()
+            print(f"======================= EXPLORING PHASE {self.exploration_steps - len(self.current_exploration)}/{self.exploration_steps}======================")
             if len(self.current_exploration) > 0:
                 if len(self.current_exploration) < self.exploration_steps:
                     self.compute_gains(weights, results)
@@ -238,6 +238,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         mask = np.zeros(len(self.reward_estimates))
         mask[sampled_inds] = 1
         self.reward_estimates += (mask * self.alpha * (rewards - self.reward_estimates)) + ((1 - mask ) * -self.reward_estimates + (1 - mask) * self.alpha * self.reward_estimates)
+        logging.info('Reward-estimates = %s', self.reward_estimates)
 
     def compute_gains(self, weights, results):
         """

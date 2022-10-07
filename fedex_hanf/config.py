@@ -9,9 +9,9 @@ LOG_DIR = './runs/'
 
 # server parameters
 DATASET = 'cifar10' # dataset to use. Alternatives: cifar10
-CLIENT_NR = 2
-MIN_TRAIN_CLIENTS = 2 # min. number of clients used during fit
-MIN_VAL_CLIENTS = 2 # min. number of clients used during evaluation
+CLIENT_NR = 5
+MIN_TRAIN_CLIENTS = 5 # min. number of clients used during fit
+MIN_VAL_CLIENTS = 5 # min. number of clients used during evaluation
 
 # model initilization parameters
 CLASSES = 10 # number of output-classes
@@ -19,9 +19,9 @@ IN_CHANNELS = 3 # mumber of input-channels (e.g. 3 for rgb-images)
 OUT_CHANNELS = 36 # number of output-channels
 CELLS = 20
 
-PORT = '8022'
-GPUS = [8] # GPUs to use
-SERVER_GPU = 6
+PORT = '8090'
+GPUS = [10, 11] # GPUs to use
+SERVER_GPU = 10
 
 DATA_SKEW = 0.5 # skew of labels. 0 = no skew, 1 only some clients hold some labels
 
