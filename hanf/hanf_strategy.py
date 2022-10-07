@@ -261,7 +261,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         hidxs = [res.metrics['hidx'] for _, res in results]
         config_idx = hidxs[0]
         # compute (avg_before - avg_after)
-        avg_gains = np.array([-w * (a - b) for w, a, b in zip(weights, after_losses, before_losses)]).sum()
+        avg_gains = np.array([w * (b - a) for w, a, b in zip(weights, after_losses, before_losses)]).sum()
         self.gain_history.append([config_idx, avg_gains])
 
 
