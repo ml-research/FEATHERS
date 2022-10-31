@@ -30,26 +30,20 @@ class Architect(object):
     unrolled_model = self._construct_model_from_theta(theta.sub(eta, moment+dtheta))
     return unrolled_model
 
-  def step(self, input_train, target_train, input_valid, target_valid, eta, network_optimizer, unrolled, std, max_grad_norm):
+  def step(self, input_train, target_train, input_valid, target_valid, eta, network_optimizer, unrolled):
     self.optimizer.zero_grad()
     if unrolled:
-        self._backward_step_unrolled(input_train, target_train, input_valid, target_valid, eta, network_optimizer, std=std, max_grad_norm=max_grad_norm)
+        self._backward_step_unrolled(input_train, target_train, input_valid, target_valid, eta, network_optimizer)
     else:
-        self._backward_step(input_valid, target_valid, std, max_grad_norm)
+        self._backward_step(input_valid, target_valid)
     self.optimizer.step()
 
-  def _backward_step(self, input_valid, target_valid, std, max_grad_norm):
+  def _backward_step(self, input_valid, target_valid):
     pred = self.model(input_valid)
     loss = self.loss_fn(pred, target_valid)
     loss.backward()
 
-    torch.nn.utils.clip_grad_norm_(self.model.arch_parameters(), max_grad_norm)
-
-    # add noise for DP
-    for p in self.model.arch_parameters():
-      p.grad += torch.normal(mean=0, std=std, size=p.shape).to(self.device)
-
-  def _backward_step_unrolled(self, input_train, target_train, input_valid, target_valid, eta, network_optimizer, std, max_grad_norm):
+  def _backward_step_unrolled(self, input_train, target_train, input_valid, target_valid, eta, network_optimizer):
     unrolled_model = self._compute_unrolled_model(input_train, target_train, eta, network_optimizer)
     pred = unrolled_model(input_valid)
     unrolled_loss = self.loss_fn(pred, target_valid)
@@ -67,8 +61,7 @@ class Architect(object):
         v.grad = Variable(g.data)
       else:
         v.grad.data.copy_(g.data)
-      torch.nn.utils.clip_grad_norm_(v, max_norm=max_grad_norm)
-      v.grad += torch.normal(mean=0, std=std, size=v.shape).to(self.device)
+
 
   def _construct_model_from_theta(self, theta):
     model_new = self.model.new()

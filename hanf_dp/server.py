@@ -8,11 +8,14 @@ import config
 from helpers import prepare_log_dirs
 import argparse
 from genotypes import GENOTYPE
+from opacus import PrivacyEngine
 
 def start_server_search(rounds):
     device = torch.device('cuda:{}'.format(str(config.SERVER_GPU))) 
     criterion = nn.CrossEntropyLoss()
     net = Network(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, criterion, device, in_channels=config.IN_CHANNELS)
+    model = PrivacyEngine.get_compatible_module(net)
+
 
     # prepare log-directories
     prepare_log_dirs()
@@ -21,7 +24,7 @@ def start_server_search(rounds):
     strategy = HANFStrategy(
         fraction_fit=0.5,
         fraction_eval=0.5,
-        initial_net=net,
+        initial_net=model,
         alpha=config.ALPHA,
         min_fit_clients=config.MIN_TRAIN_CLIENTS,
         min_eval_clients=config.MIN_VAL_CLIENTS,
@@ -40,8 +43,10 @@ def start_server_valid(rounds):
     device = torch.device('cuda:{}'.format(str(config.SERVER_GPU))) 
     if config.DATASET == 'cifar10' or config.DATASET == 'fmnist':
         net = NetworkCIFAR(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, False, GENOTYPE, device=device, in_channels=config.IN_CHANNELS)
+        model = PrivacyEngine.get_compatible_module(net)
     elif config.DATASET == 'imagenet':
         net = NetworkImageNet(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, False, GENOTYPE, device=device)
+        model = PrivacyEngine.get_compatible_module(net)
 
     # prepare log-directories
     prepare_log_dirs()
@@ -50,7 +55,7 @@ def start_server_valid(rounds):
     strategy = HANFStrategy(
         fraction_fit=0.5,
         fraction_eval=0.5,
-        initial_net=net,
+        initial_net=model,
         alpha=config.ALPHA,
         min_fit_clients=config.MIN_TRAIN_CLIENTS,
         min_eval_clients=config.MIN_VAL_CLIENTS,

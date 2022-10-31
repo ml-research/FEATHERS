@@ -6,12 +6,13 @@ from genotypes import PRIMITIVES
 from genotypes import Genotype
 from opacus.grad_sample import register_grad_sampler
 from typing import Dict
+from .utils import get_params
 
 
-class MixedOp(nn.Module):
+class ParallelOp(nn.Module):
 
-  def __init__(self, C, stride):
-    super(MixedOp, self).__init__()
+  def __init__(self, C, stride) -> None:
+    super().__init__()
     self._ops = nn.ModuleList()
     for primitive in PRIMITIVES:
       op = OPS[primitive](C, stride, False)
@@ -19,13 +20,27 @@ class MixedOp(nn.Module):
         op = nn.Sequential(op, nn.GroupNorm(num_groups=1, num_channels=C, affine=False))
       self._ops.append(op)
 
-  def forward(self, x, weights):
-    return sum(w * op(x) for w, op in zip(weights, self._ops))
+  def forward(self, x):
+      operation_outs = []
+      for op in self._ops:
+          out = op(x)
+          operation_outs.append(out)
+      return torch.stack(operation_outs)
+
+class MixedOp(nn.Module):
+
+    def __init__(self):
+        super(MixedOp, self).__init__()
+        self.alphas = nn.Parameter(torch.zeros(len(PRIMITIVES)), requires_grad=True)
+
+    def forward(self, x):
+        weights = torch.softmax(self.alphas, 0)
+        return sum(w * op_out for w, op_out in zip(weights, x))
 
 
 class Cell(nn.Module):
 
-  def __init__(self, steps, multiplier, C_prev_prev, C_prev, C, reduction, reduction_prev):
+  def __init__(self, steps, multiplier, C_prev_prev, C_prev, C, reduction, reduction_prev, mixed_ops_normal, mixed_ops_reduce):
     super(Cell, self).__init__()
     self.reduction = reduction
 
@@ -39,20 +54,26 @@ class Cell(nn.Module):
 
     self._ops = nn.ModuleList()
     self._bns = nn.ModuleList()
+
+    mixed_op_idx = 0
     for i in range(self._steps):
       for j in range(2+i):
         stride = 2 if reduction and j < 2 else 1
-        op = MixedOp(C, stride)
+        if reduction:
+          op = nn.Sequential(ParallelOp(C, stride), mixed_ops_reduce[mixed_op_idx])
+        else:
+          op = nn.Sequential(ParallelOp(C, stride), mixed_ops_normal[mixed_op_idx])
+        mixed_op_idx += 1
         self._ops.append(op)
 
-  def forward(self, s0, s1, weights):
+  def forward(self, s0, s1):
     s0 = self.preprocess0(s0)
     s1 = self.preprocess1(s1)
 
     states = [s0, s1]
     offset = 0
     for i in range(self._steps):
-      s = sum(self._ops[offset+j](h, weights[offset+j]) for j, h in enumerate(states))
+      s = sum(self._ops[offset+j](h) for j, h in enumerate(states))
       offset += len(states)
       states.append(s)
 
@@ -80,13 +101,15 @@ class Network(nn.Module):
     C_prev_prev, C_prev, C_curr = C_curr, C_curr, C
     self.cells = nn.ModuleList()
     reduction_prev = False
+    self._init_mixed_ops()
     for i in range(layers):
       if i in [layers//3, 2*layers//3]:
         C_curr *= 2
         reduction = True
       else:
         reduction = False
-      cell = Cell(steps, multiplier, C_prev_prev, C_prev, C_curr, reduction, reduction_prev)
+
+      cell = Cell(steps, multiplier, C_prev_prev, C_prev, C_curr, reduction, reduction_prev, self.mixed_ops_normal, self.mixed_ops_reduce)
       reduction_prev = reduction
       self.cells += [cell]
       C_prev_prev, C_prev = C_prev, multiplier*C_curr
@@ -94,39 +117,24 @@ class Network(nn.Module):
     self.global_pooling = nn.AdaptiveAvgPool2d(1)
     self.classifier = nn.Linear(C_prev, num_classes)
 
-    self._initialize_alphas()
-
   def new(self):
     model_new = Network(self._C, self._num_classes, self._layers, self._criterion, self.device).to(self.device)
-    for x, y in zip(model_new.arch_parameters(), self.arch_parameters()):
+    for x, y in zip(get_params(model_new, 'arch'), get_params(self, 'arch')):
         x.data.copy_(y.data)
     return model_new
 
   def forward(self, input):
     s0 = s1 = self.stem(input)
     for i, cell in enumerate(self.cells):
-      if cell.reduction:
-        weights = F.softmax(self.alphas_reduce, dim=-1)
-      else:
-        weights = F.softmax(self.alphas_normal, dim=-1)
-      s0, s1 = s1, cell(s0, s1, weights)
+      s0, s1 = s1, cell(s0, s1)
     out = self.global_pooling(s1)
     logits = self.classifier(out.view(out.size(0),-1))
     return logits
 
-  def _initialize_alphas(self):
+  def _init_mixed_ops(self):
     k = sum(1 for i in range(self._steps) for n in range(2+i))
-    num_ops = len(PRIMITIVES)
-
-    self.alphas_normal = nn.Parameter(1e-3*torch.randn(k, num_ops).to(self.device), requires_grad=True)
-    self.alphas_reduce = nn.Parameter(1e-3*torch.randn(k, num_ops).to(self.device), requires_grad=True)
-    self._arch_parameters = [
-      self.alphas_normal,
-      self.alphas_reduce,
-    ]
-
-  def arch_parameters(self):
-    return self._arch_parameters
+    self.mixed_ops_normal = [MixedOp() for _ in range(k)]
+    self.mixed_ops_reduce = [MixedOp() for _ in range(k)]
 
   def genotype(self):
 
@@ -149,8 +157,10 @@ class Network(nn.Module):
         n += 1
       return gene
 
-    gene_normal = _parse(F.softmax(self.alphas_normal, dim=-1).data.cpu().numpy())
-    gene_reduce = _parse(F.softmax(self.alphas_reduce, dim=-1).data.cpu().numpy())
+    alphas_normal = torch.stack([mop.alphas.data for mop in self.mixed_ops_normal])
+    alphas_reduce = torch.stack([mop.alphas.data for mop in self.mixed_ops_reduce])
+    gene_normal = _parse(F.softmax(alphas_normal, dim=-1).data.cpu().numpy())
+    gene_reduce = _parse(F.softmax(alphas_reduce, dim=-1).data.cpu().numpy())
 
     concat = range(2+self._steps-self._multiplier, self._steps+2)
     genotype = Genotype(
@@ -159,25 +169,14 @@ class Network(nn.Module):
     )
     return genotype
 
-@register_grad_sampler(Network)
-def compute_linear_grad_sample(
-    layer: Network, activations: torch.Tensor, backprops: torch.Tensor
-) -> Dict[nn.Parameter, torch.Tensor]:
-    """
-    Computes per sample gradients for ``nn.Linear`` layer
-    Args:
-        layer: Layer
-        activations: Activations
-        backprops: Backpropagations
-    """
-    print(backprops.shape)
-    print(activations.shape)
-    # TODO: We receive dL/dN where N is our network and input into the network, i.e. we would have to compute each gradient manually.
-    #   How can we circumvent this? Probably we have to break down the cell-structure and implement the cells directly in the network(?)
-    # TODO: Try to register Cell grad_sampler and see if it works out. 
-    gs = torch.einsum("ni,n...kj->nkj", backprops, activations)
-    ret = {layer.classifier.weight: gs}
-    if layer.classifier.bias is not None:
-        ret[layer.classifier.bias] = torch.einsum("n...k->nk", backprops)
+@register_grad_sampler(ParallelOp)
+def grad_sampler_parallel_op(layer: MixedOp, activations: torch.Tensor, backprops: torch.Tensor):
+    return {}
 
+@register_grad_sampler(MixedOp)
+def grad_sampler_mixed_op(layer: MixedOp, activations: torch.Tensor, backprops: torch.Tensor):
+    grad = torch.einsum('nbcwh,bcwh->nb', activations, backprops)
+    ret = {
+        layer.alphas: grad
+    }
     return ret

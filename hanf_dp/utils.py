@@ -9,6 +9,7 @@ import torchvision
 import math
 import json
 from ..datasets.fraud_detection import FraudDetection
+from torch import nn
 
 class Loader:
 
@@ -283,3 +284,15 @@ def create_exp_dir(path, scripts_to_save=None):
       dst_file = os.path.join(path, 'scripts', os.path.basename(script))
       shutil.copyfile(script, dst_file)
 
+def get_params(net: nn.Module, param_type='arch'):
+    parameters = []
+    for name, param in net.named_parameters():
+        if param_type == 'arch':
+            if 'alphas' in name:
+                parameters.append(param)
+        elif param_type == 'model':
+            if 'alphas' not in name:
+                parameters.append(param)
+        else:
+            raise ValueError('Unsupported parameter type, must be either arch or model')
+    return parameters

@@ -1,5 +1,6 @@
 from collections import OrderedDict
 from copy import deepcopy
+from email.policy import strict
 import warnings
 
 import flwr as fl
@@ -8,7 +9,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 import numpy as np
-from utils import get_dataset_loder
+from .utils import get_dataset_loder, get_params
 from rtpt import RTPT
 import config
 from hyperparameters import Hyperparameters
@@ -43,7 +44,7 @@ def _test(net, testloader, device):
     accuracy = correct / total
     return loss, accuracy
 
-def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, std, max_grad_norm, device):
+def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, device):
 
     for step, (input, target) in enumerate(train_queue):
         model.train()
@@ -54,19 +55,28 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, 
         input_search = input_search.to(device, non_blocking=True)
         target_search = target_search.to(device, non_blocking=True)
 
-        architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=False, std=std, max_grad_norm=max_grad_norm)
+        architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=False)
+
+        # sync model (arch -> model)
+        model = sync_models(architect.model, model)
         
         optimizer.zero_grad()
         logits = model(input)
         loss = criterion(logits, target)
         loss.backward()
-        nn.utils.clip_grad_norm(model.parameters(), max_grad_norm)
-
-        for p in model.parameters():
-            p.grad += torch.normal(mean=0, std=std, size=p.shape).to(device)
+        nn.utils.clip_grad_norm(model.parameters(), 5.)
         optimizer.step()
+
+        # sync model (model -> arch)
+        architect.model = sync_models(model, architect.model)
   
     return model
+
+def sync_models(updated_model, model_tbu):
+    state_dict = updated_model.state_dict()
+    model_tbu.load_state_dict(state_dict, strict=True)
+    return model_tbu
+
 
 # #############################################################################
 # 2. Federation of the pipeline with Flower
@@ -93,15 +103,21 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             self.criterion = torch.nn.CrossEntropyLoss()
             self.criterion = self.criterion.to(device)
             self.model = Network(out_channels, classes, cell_nr, self.criterion, device, in_channels=input_channels)
-            self.optimizer = torch.optim.SGD(self.model.parameters(), 0.01, 0.9, 3e-4)
-            arch_optim = torch.optim.Adam(self.model.arch_parameters(),
+            arch_model = deepcopy(self.model) # since opcaus cannot register multiple hooks to the same model, we have to instantiate two models and sync them after each step
+            self.optimizer = torch.optim.SGD(get_params(self.model, 'model'), 0.01, 0.9, 3e-4)
+            arch_optim = torch.optim.Adam(get_params(arch_model, 'arch'),
                             lr=3e-4, betas=(0.5, 0.999), weight_decay=1e-3)
             self.train_loader = DataLoader(train_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
             self.val_loader = DataLoader(test_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
             #self.model = ModuleValidator.fix(self.model) # required to replace modules not supported by opacus (e.g. BatchNorm)
             #ModuleValidator.validate(self.model, strict=False)
+            pe = PrivacyEngine()
+            self.model, self.optimizer, self.train_loader = pe.make_private(self.model, self.optimizer, self.train_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
+            arch_model, arch_optim, self.val_loader = pe.make_private(arch_model, arch_optim, self.val_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
+
             self.model = self.model.to(device)
-            self.architect = Architect(self.model, arch_optim, 0.9, 1e-3, self.criterion, device)
+            arch_model = arch_model.to(device)
+            self.architect = Architect(arch_model, arch_optim, 0.9, 1e-3, self.criterion, device)
 
         def get_parameters(self):
             return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
@@ -118,6 +134,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             params_dict = zip(self.model.state_dict().keys(), parameters)
             state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
             self.model.load_state_dict(state_dict, strict=True)
+            self.architect.model.load_state_dict(state_dict, strict=True)
 
         def set_parameters_evaluate(self, parameters):
             params_dict = zip(self.model.state_dict().keys(), parameters)
@@ -132,7 +149,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
                 self.epoch += 1
                 self.model = train(self.train_loader, self.val_loader, self.model,
                                                  self.architect, self.criterion, self.optimizer, 
-                                                 self.hyperparam_config['learning_rate'], config.STD, config.MAX_GRAD_NORM, device)
+                                                 self.hyperparam_config['learning_rate'], device)
             after_loss, _ = _test(self.model, self.val_loader, device)
             model_params = self.get_parameters()
             return model_params, len(train_data), {'hidx': int(self.hidx), 'before': float(before_loss), 'after': float(after_loss)}
