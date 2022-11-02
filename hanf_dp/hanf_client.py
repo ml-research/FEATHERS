@@ -21,6 +21,7 @@ from architect import Architect
 from opacus import PrivacyEngine
 from opacus.validators import ModuleValidator
 from opacus.utils.batch_memory_manager import BatchMemoryManager
+from dp_arch_optimizer import DPOptimizer
 
 warnings.filterwarnings("ignore", category=UserWarning)
 EPOCHS = 1
@@ -113,11 +114,12 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             #ModuleValidator.validate(self.model, strict=False)
             pe = PrivacyEngine()
             self.model, self.optimizer, self.train_loader = pe.make_private(self.model, self.optimizer, self.train_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
-            arch_model, arch_optim, self.val_loader = pe.make_private(arch_model, arch_optim, self.val_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
+            arch_model, _, self.val_loader = pe.make_private(arch_model, arch_optim, self.val_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
+            dp_arch_optim = DPOptimizer(arch_optim, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM, expected_batch_size=config.BATCH_SIZE)
 
             self.model = self.model.to(device)
             arch_model = arch_model.to(device)
-            self.architect = Architect(arch_model, arch_optim, 0.9, 1e-3, self.criterion, device)
+            self.architect = Architect(arch_model, dp_arch_optim, 0.9, 1e-3, self.criterion, device)
 
         def get_parameters(self):
             return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
