@@ -175,8 +175,32 @@ def grad_sampler_parallel_op(layer: MixedOp, activations: torch.Tensor, backprop
 
 @register_grad_sampler(MixedOp)
 def grad_sampler_mixed_op(layer: MixedOp, activations: torch.Tensor, backprops: torch.Tensor):
-    grad = torch.einsum('nbcwh,bcwh->nb', activations, backprops)
-    ret = {
-        layer.alphas: grad
-    }
-    return ret
+  """
+    The gradient of the loss (l) w.r.t. the architecture parameters (alpha) is defined as dl/dm * dm/dalpha where m is the mixed operation.
+    Since the mixed operation is a weighted sum of operations' outputs an each weight is computed by the softmax over alpha, we have to compute
+    the gradient w.r.t. alpha by sum(ds/da * x) where s is the softmax function and a an architecture parameter from alpha. Doing this for each
+    a in alpha, we can represent this as an einsum where we sum over all oerpations weighted by the gradient of the softmax w.r.t. some a. This has
+    to be done for each a to obtain the full gradient of the loss w.r.t. the architecture parameters. 
+  """
+  # compute Jacobian of softmax
+  sftmx = torch.softmax(layer.alphas, 0)
+  j_sftmx_vals = []
+  for i in range(len(sftmx)):
+      col = []
+      for j in range(len(sftmx)):
+          if i == j:
+              deriv = sftmx[i] * (1 - sftmx[i])
+          else:
+              deriv = -sftmx[j] * sftmx[i]
+          col.append(deriv)
+      j_sftmx_vals.append(col)
+  j_sftmx_trans = torch.tensor(j_sftmx_vals)
+  
+  # d = c = number of operations, b = number of batches
+  sftmx_grad = torch.einsum('dc,cb...->db...', j_sftmx_trans, activations) # we sum over columns since we have the transposed jacobian of softmax w.r.t. inputs
+  final_grad = torch.einsum('db...,b...->db', sftmx_grad, backprops) # apply chain rule and multiply softmax-gradients with the gradient coming from the next layer
+  #grad = torch.einsum('nbcwh,bcwh->nb', activations, backprops)
+  ret = {
+      layer.alphas: final_grad
+  }
+  return ret

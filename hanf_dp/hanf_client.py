@@ -21,6 +21,7 @@ from architect import Architect
 from opacus import PrivacyEngine
 from opacus.validators import ModuleValidator
 from opacus.utils.batch_memory_manager import BatchMemoryManager
+from dp_arch_optimizer import DPOptimizer
 
 warnings.filterwarnings("ignore", category=UserWarning)
 EPOCHS = 1
@@ -109,22 +110,21 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             self.criterion = self.criterion.to(device)
             self.model = Network(out_channels, classes, cell_nr, self.criterion, device, in_channels=input_channels)
             arch_model = deepcopy(self.model) # since opcaus cannot register multiple hooks to the same model, we have to instantiate two models and sync them after each step
-            model_optim_ = torch.optim.SGD(get_params(self.model, 'model'), 0.01, 0.9, 3e-4)
-            arch_optim_ = torch.optim.Adam(get_params(arch_model, 'arch'),
+            model_optim = torch.optim.SGD(get_params(self.model, 'model'), 0.01, 0.9, 3e-4)
+            arch_optim = torch.optim.Adam(get_params(arch_model, 'arch'),
                             lr=3e-4, betas=(0.5, 0.999), weight_decay=1e-3)
             self.train_loader = DataLoader(train_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
             self.val_loader = DataLoader(test_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
             #self.model = ModuleValidator.fix(self.model) # required to replace modules not supported by opacus (e.g. BatchNorm)
             #ModuleValidator.validate(self.model, strict=False)
             pe = PrivacyEngine()
-            self.model, self.optimizer, self.train_loader = pe.make_private(module=self.model, optimizer=model_optim_, 
-                                                    data_loader=self.train_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
-            arch_model, arch_optim, self.val_loader = pe.make_private(module=arch_model, optimizer=arch_optim_, 
-                                                    data_loader=self.val_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
+            self.model, self.optimizer, self.train_loader = pe.make_private(self.model, model_optim, self.train_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
+            arch_model, _, self.val_loader = pe.make_private(arch_model, arch_optim, self.val_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
+            dp_arch_optim = DPOptimizer(arch_optim, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM, expected_batch_size=config.BATCH_SIZE)
 
             self.model = self.model.to(device)
             arch_model = arch_model.to(device)
-            self.architect = Architect(arch_model, arch_optim, 0.9, 1e-3, self.criterion, device)
+            self.architect = Architect(arch_model, dp_arch_optim, 0.9, 1e-3, self.criterion, device)
 
         def get_parameters(self):
             return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
