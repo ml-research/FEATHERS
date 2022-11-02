@@ -6,7 +6,7 @@ from genotypes import PRIMITIVES
 from genotypes import Genotype
 from opacus.grad_sample import register_grad_sampler
 from typing import Dict
-from .utils import get_params
+from utils import get_params
 
 
 class ParallelOp(nn.Module):
