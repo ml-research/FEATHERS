@@ -37,6 +37,7 @@ class Architect(object):
     else:
         self._backward_step(input_valid, target_valid)
     self.optimizer.step()
+    self.model.zero_grad()
 
   def _backward_step(self, input_valid, target_valid):
     pred = self.model(input_valid)

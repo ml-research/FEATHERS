@@ -53,6 +53,8 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, 
         with BatchMemoryManager(data_loader=valid_queue,
                 max_physical_batch_size=config.BATCH_SIZE, optimizer=architect.optimizer) as valid_bmm:
             for step, (input, target) in enumerate(train_bmm):
+                if step % 50 == 0:
+                    print(f'Step {step:03d}')
                 model.train()
                 input = input.to(device, non_blocking=True)
                 target = target.to(device, non_blocking=True)
@@ -72,6 +74,7 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, 
                 loss.backward()
                 nn.utils.clip_grad_norm(model.parameters(), 5.)
                 optimizer.step()
+                model.zero_grad()
 
                 # sync model (model -> arch)
                 architect.model = sync_models(model, architect.model)
@@ -118,8 +121,10 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             #self.model = ModuleValidator.fix(self.model) # required to replace modules not supported by opacus (e.g. BatchNorm)
             #ModuleValidator.validate(self.model, strict=False)
             pe = PrivacyEngine()
-            self.model, self.optimizer, self.train_loader = pe.make_private(self.model, model_optim, self.train_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
-            arch_model, _, self.val_loader = pe.make_private(arch_model, arch_optim, self.val_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
+            self.model, self.optimizer, self.train_loader = pe.make_private(module=self.model, optimizer=model_optim, 
+                                                    data_loader=self.train_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
+            arch_model, _, self.val_loader = pe.make_private(module=arch_model, optimizer=arch_optim, 
+                                                    data_loader=self.val_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
             dp_arch_optim = DPOptimizer(arch_optim, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM, expected_batch_size=config.BATCH_SIZE)
 
             self.model = self.model.to(device)

@@ -195,6 +195,8 @@ def grad_sampler_mixed_op(layer: MixedOp, activations: torch.Tensor, backprops: 
           col.append(deriv)
       j_sftmx_vals.append(col)
   j_sftmx_trans = torch.tensor(j_sftmx_vals)
+  device = activations.get_device()
+  j_sftmx_trans = j_sftmx_trans.to(device=device)
   
   # d = c = number of operations, b = number of batches
   sftmx_grad = torch.einsum('dc,cb...->db...', j_sftmx_trans, activations) # we sum over columns since we have the transposed jacobian of softmax w.r.t. inputs

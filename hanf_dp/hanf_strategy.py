@@ -19,6 +19,7 @@ from hyperparameters import Hyperparameters
 import logging
 import os
 import sys
+from model_search import Network
 
 DEVICE = torch.device("cuda:{}".format(str(config.SERVER_GPU)) if torch.cuda.is_available() else "cpu")
 
@@ -108,6 +109,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         fh = logging.FileHandler(os.path.join('./models/' + log_prefix.format(self.date), 'log.txt'))
         fh.setFormatter(logging.Formatter(self.log_format))
         logging.getLogger().addHandler(fh)
+        logging.getLogger().setLevel(logging.INFO)
 
     def aggregate_fit(
         self,
@@ -286,7 +288,9 @@ class HANFStrategy(fl.server.strategy.FedAvg):
 
         # log current genotype if we are in architecture search phase
         if self.stage == 'search':
-            genotype = self.net.genotype()
+            modules = list(self.net.modules())
+            model = [module for module in modules if type(module) == Network][0]
+            genotype = model.genotype()
             logging.info('genotype = %s', genotype)
 
         # since evaluate is the last method being called in one round, step rtpt here
