@@ -9,7 +9,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 import numpy as np
-from .utils import get_dataset_loder, get_params
+from utils import get_dataset_loder, get_params
 from rtpt import RTPT
 import config
 from hyperparameters import Hyperparameters
@@ -47,29 +47,37 @@ def _test(net, testloader, device):
 
 def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, device):
 
-    for step, (input, target) in enumerate(train_queue):
-        model.train()
-        input = input.to(device, non_blocking=True)
-        target = target.to(device, non_blocking=True)
-        # get a random minibatch from the search queue with replacement
-        input_search, target_search = next(iter(valid_queue))
-        input_search = input_search.to(device, non_blocking=True)
-        target_search = target_search.to(device, non_blocking=True)
-
-        architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=False)
-
-        # sync model (arch -> model)
-        model = sync_models(architect.model, model)
+    with BatchMemoryManager(data_loader=train_queue, 
+                max_physical_batch_size=config.BATCH_SIZE, optimizer=optimizer) as train_bmm:
         
-        optimizer.zero_grad()
-        logits = model(input)
-        loss = criterion(logits, target)
-        loss.backward()
-        nn.utils.clip_grad_norm(model.parameters(), 5.)
-        optimizer.step()
+        with BatchMemoryManager(data_loader=valid_queue,
+                max_physical_batch_size=config.BATCH_SIZE, optimizer=architect.optimizer) as valid_bmm:
+            for step, (input, target) in enumerate(train_bmm):
+                if step % 50 == 0:
+                    print(f'Step {step:03d}')
+                model.train()
+                input = input.to(device, non_blocking=True)
+                target = target.to(device, non_blocking=True)
+                # get a random minibatch from the search queue with replacement
+                input_search, target_search = next(iter(valid_bmm))
+                input_search = input_search.to(device, non_blocking=True)
+                target_search = target_search.to(device, non_blocking=True)
 
-        # sync model (model -> arch)
-        architect.model = sync_models(model, architect.model)
+                architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=False)
+
+                # sync model (arch -> model)
+                model = sync_models(architect.model, model)
+                
+                optimizer.zero_grad()
+                logits = model(input)
+                loss = criterion(logits, target)
+                loss.backward()
+                nn.utils.clip_grad_norm(model.parameters(), 5.)
+                optimizer.step()
+                model.zero_grad()
+
+                # sync model (model -> arch)
+                architect.model = sync_models(model, architect.model)
   
     return model
 
@@ -105,7 +113,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             self.criterion = self.criterion.to(device)
             self.model = Network(out_channels, classes, cell_nr, self.criterion, device, in_channels=input_channels)
             arch_model = deepcopy(self.model) # since opcaus cannot register multiple hooks to the same model, we have to instantiate two models and sync them after each step
-            self.optimizer = torch.optim.SGD(get_params(self.model, 'model'), 0.01, 0.9, 3e-4)
+            model_optim = torch.optim.SGD(get_params(self.model, 'model'), 0.01, 0.9, 3e-4)
             arch_optim = torch.optim.Adam(get_params(arch_model, 'arch'),
                             lr=3e-4, betas=(0.5, 0.999), weight_decay=1e-3)
             self.train_loader = DataLoader(train_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
@@ -113,8 +121,10 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             #self.model = ModuleValidator.fix(self.model) # required to replace modules not supported by opacus (e.g. BatchNorm)
             #ModuleValidator.validate(self.model, strict=False)
             pe = PrivacyEngine()
-            self.model, self.optimizer, self.train_loader = pe.make_private(self.model, self.optimizer, self.train_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
-            arch_model, _, self.val_loader = pe.make_private(arch_model, arch_optim, self.val_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
+            self.model, self.optimizer, self.train_loader = pe.make_private(module=self.model, optimizer=model_optim, 
+                                                    data_loader=self.train_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
+            arch_model, _, self.val_loader = pe.make_private(module=arch_model, optimizer=arch_optim, 
+                                                    data_loader=self.val_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
             dp_arch_optim = DPOptimizer(arch_optim, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM, expected_batch_size=config.BATCH_SIZE)
 
             self.model = self.model.to(device)
