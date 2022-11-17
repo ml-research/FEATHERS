@@ -1,5 +1,4 @@
 from collections import OrderedDict
-from turtle import rt
 import warnings
 
 import flwr as fl
