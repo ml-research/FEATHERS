@@ -22,8 +22,8 @@ OUT_CHANNELS = 16 # number of output-channels
 NODE_NR = 7 # number of nodes per cell
 
 PORT = '8042'
-GPUS = [3, 6, 4] # GPUs to use
-SERVER_GPU = 4
+GPUS = [0, 1, 2] # GPUs to use
+SERVER_GPU = 2
 
 DATA_SKEW = 0 # skew of labels. 0 = no skew, 1 only some clients hold some labels
 
