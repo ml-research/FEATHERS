@@ -188,7 +188,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
 
             
     # Start client
-    fl.client.start_numpy_client("[::]:{}".format(config.PORT), client=HANFClient())
+    fl.client.start_numpy_client("127.0.0.1:{}".format(config.PORT), client=HANFClient())
 
 
 if __name__ == "__main__":
