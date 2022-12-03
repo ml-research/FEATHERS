@@ -8,7 +8,7 @@ from torch.utils.data import random_split, Subset
 import torchvision
 import math
 import json
-from ..datasets.fraud_detection import FraudDetection
+# from ..datasets.fraud_detection import FraudDetection
 
 class Loader:
 

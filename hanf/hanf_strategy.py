@@ -103,9 +103,10 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         logging.basicConfig(stream=sys.stdout, level=logging.INFO,
         format=self.log_format, datefmt='%m/%d %I:%M:%S %p')
         log_prefix = 'run_{}' if stage == 'search' else 'run_valid_{}'
-        if not os.path.exists('./models/' + log_prefix.format(self.date)):
-            os.mkdir('./models/' + log_prefix.format(self.date))
-        fh = logging.FileHandler(os.path.join('./models/' + log_prefix.format(self.date), 'log.txt'))
+        log_id_str = f'{config.DATASET}_{config.CLIENT_NR}_{config.DATA_SKEW}_{self.date}'
+        if not os.path.exists('./models/' + log_prefix.format(log_id_str)):
+            os.mkdir('./models/' + log_prefix.format(log_id_str))
+        fh = logging.FileHandler(os.path.join('./models/' + log_prefix.format(log_id_str), 'log.txt'))
         fh.setFormatter(logging.Formatter(self.log_format))
         logging.getLogger().addHandler(fh)
 
