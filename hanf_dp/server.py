@@ -14,6 +14,7 @@ def start_server_search(rounds):
     device = torch.device('cuda:{}'.format(str(config.SERVER_GPU))) 
     criterion = nn.CrossEntropyLoss()
     net = Network(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, criterion, device, in_channels=config.IN_CHANNELS)
+    net = net.to(device)
     model = PrivacyEngine.get_compatible_module(net)
 
 
@@ -34,7 +35,7 @@ def start_server_search(rounds):
 
     # Start server
     fl.server.start_server(
-        server_address="[::]:{}".format(config.PORT),
+        server_address="0.0.0.0:{}".format(config.PORT),
         config={"num_rounds": rounds},
         strategy=strategy,
     )
