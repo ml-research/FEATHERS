@@ -8,7 +8,7 @@ from torch.utils.data import random_split, Subset
 import torchvision
 import math
 import json
-from ..datasets.fraud_detection import FraudDetection
+from ..datasets.fraud_detection import FraudDetectionData
 
 class Loader:
 
@@ -88,8 +88,8 @@ class FraudDetection(Loader):
 
     def __init__(self, n_clients, indspath, skew=0) -> None:
        super().__init__(n_clients, indspath, skew)
-       self.train_data = FraudDetection('../../../datasets/ccFraud/', train=True)
-       self.val_data = FraudDetection('../../../datasets/ccFraud/', train=False)
+       self.train_data = FraudDetectionData('../../../datasets/ccFraud/', train=True)
+       self.val_data = FraudDetectionData('../../../datasets/ccFraud/', train=False)
 
 
 def get_dataset_loder(dataset, num_clients, indspath, skew=0):
@@ -99,6 +99,8 @@ def get_dataset_loder(dataset, num_clients, indspath, skew=0):
         return CIFAR10Loader(num_clients, indspath, skew=skew)
     elif dataset == 'imagenet':
         return ImageNet(num_clients, indspath, skew=skew)
+    elif dataset == 'fraud':
+        return FraudDetection(num_clients, indspath, skew=skew)
     else:
         raise ValueError('{} is not supported'.format(dataset))
 

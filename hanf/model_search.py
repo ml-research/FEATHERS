@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from operations import *
-from genotypes import PRIMITIVES
+from genotypes import PRIMITIVES, TABULAR_PRIMITIVES
 from genotypes import Genotype
 
 
@@ -161,3 +161,137 @@ class Network(nn.Module):
     )
     return genotype
 
+
+class TabularMixedOp(nn.Module):
+  def __init__(self, in_dim, out_dim):
+    super(TabularMixedOp, self).__init__()
+    self._ops = nn.ModuleList()
+    for primitive in TABULAR_PRIMITIVES:
+      op = TABOPS[primitive](in_dim, out_dim)
+      self._ops.append(op)
+
+  def forward(self, x, weights):
+    return sum(w * op(x) for w, op in zip(weights, self._ops))
+
+class TabularCell(nn.Module):
+  def __init__(self, steps, out_prev_prev, out_prev, out_curr, reduction, reduction_prev):
+    super(Cell, self).__init__()
+    self.reduction = reduction
+    self.reduction_prev = reduction_prev
+
+    if reduction_prev:
+      self.preprocess = lambda x: x
+    else:
+      self.preprocess = nn.Linear(out_prev_prev, out_prev)
+    self._steps = steps
+
+    self._ops = nn.ModuleList()
+    self._bns = nn.ModuleList()
+    for i in range(self._steps):
+      for j in range(2+i):
+        op = TabularMixedOp(out_prev, out_curr)
+        self._ops.append(op)
+
+  def forward(self, s0, s1, weights):
+    if self.reduction_prev:
+      s1 = self.preprocess(s1)
+    else:
+      s0 = self.preprocess(s0)
+
+    states = [s0, s1]
+    offset = 0
+    for i in range(self._steps):
+      s = sum(self._ops[offset+j](h, weights[offset+j]) for j, h in enumerate(states))
+      offset += len(states)
+      states.append(s)
+
+    return torch.cat(states[-self._multiplier:], dim=1)
+
+
+class TabularNetwork(nn.Module):
+  def __init__(self, steps, in_dim, num_classes, layers, criterion, device):
+    super(Network, self).__init__()
+    self.in_dime = in_dim
+    self._num_classes = num_classes
+    self._layers = layers
+    self._criterion = criterion
+    self.device = device
+ 
+    dim_prev_prev, dim_prev, dim_curr = in_dim, in_dim, in_dim
+    self.cells = nn.ModuleList()
+    reduction_prev = False
+    for i in range(layers):
+      if i in [layers//3, 2*layers//3]:
+        dim_curr = int(dim_curr * 0.8)
+        reduction = True
+      else:
+        reduction = False
+      cell = TabularCell(steps, dim_prev_prev, dim_prev, dim_curr, 
+                      reduction=reduction, reduction_prev=reduction_prev)
+      reduction_prev = reduction
+      self.cells += [cell]
+      dim_prev_prev, dim_prev = dim_prev, dim_curr
+
+    self.classifier = nn.Linear(dim_prev, num_classes)
+
+    self._initialize_alphas()
+
+  def forward(self, input):
+    s0 = s1 = input
+    for i, cell in enumerate(self.cells):
+      if cell.reduction:
+        weights = F.softmax(self.alphas_reduce, dim=-1)
+      else:
+        weights = F.softmax(self.alphas_normal, dim=-1)
+      s0, s1 = s1, cell(s0, s1, weights)
+    logits = self.classifier()
+    return logits
+
+  def _loss(self, input, target):
+    logits = self(input)
+    return self._criterion(logits, target) 
+
+  def _initialize_alphas(self):
+    k = sum(1 for i in range(self._steps) for n in range(2+i))
+    num_ops = len(TABULAR_PRIMITIVES)
+
+    self.alphas_normal = nn.Parameter(1e-3*torch.randn(k, num_ops).to(self.device), requires_grad=True)
+    self.alphas_reduce = nn.Parameter(1e-3*torch.randn(k, num_ops).to(self.device), requires_grad=True)
+    self._arch_parameters = [
+      self.alphas_normal,
+      self.alphas_reduce,
+    ]
+
+  def arch_parameters(self):
+    return self._arch_parameters
+
+  def genotype(self):
+
+    def _parse(weights):
+      gene = []
+      n = 2
+      start = 0
+      for i in range(self._steps):
+        end = start + n
+        W = weights[start:end].copy()
+        edges = sorted(range(i + 2), key=lambda x: -max(W[x][k] for k in range(len(W[x])) if k != PRIMITIVES.index('none')))[:2]
+        for j in edges:
+          k_best = None
+          for k in range(len(W[j])):
+            if k != PRIMITIVES.index('none'):
+              if k_best is None or W[j][k] > W[j][k_best]:
+                k_best = k
+          gene.append((PRIMITIVES[k_best], j))
+        start = end
+        n += 1
+      return gene
+
+    gene_normal = _parse(F.softmax(self.alphas_normal, dim=-1).data.cpu().numpy())
+    gene_reduce = _parse(F.softmax(self.alphas_reduce, dim=-1).data.cpu().numpy())
+
+    concat = range(2+self._steps-self._multiplier, self._steps+2)
+    genotype = Genotype(
+      normal=gene_normal, normal_concat=concat,
+      reduce=gene_reduce, reduce_concat=concat
+    )
+    return genotype

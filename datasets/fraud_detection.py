@@ -4,7 +4,7 @@ import torch
 import pandas as pd
 import numpy as np
 
-class FraudDetection(Dataset):
+class FraudDetectionData(Dataset):
 
     def __init__(self, file, train) -> None:
         super().__init__()

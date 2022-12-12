@@ -21,6 +21,7 @@ CELL_NR = 20 # number of cells the search space consists of (if search phase). E
 IN_CHANNELS = 3 # mumber of input-channels (e.g. 3 for rgb-images)
 OUT_CHANNELS = 36 # number of output-channels
 NODE_NR = 7 # number of nodes per cell
+FRAUD_DETECTION_IN_DIM = 20 # TODO: how many?
 
 PORT = '8040'
 GPUS = [1, 2, 3, 4, 5, 6, 7, 8, 9] # GPUs to use
