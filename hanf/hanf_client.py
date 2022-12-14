@@ -15,7 +15,7 @@ from hyperparameters import Hyperparameters
 from tensorboardX import SummaryWriter
 from datetime import datetime as dt
 import argparse
-from model_search import Network
+from model_search import Network, TabularNetwork
 from architect import Architect
 
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -93,7 +93,10 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             self.hyperparameters.read_from_csv(config.HYPERPARAM_FILE)
             self.criterion = torch.nn.CrossEntropyLoss()
             self.criterion = self.criterion.to(device)
-            self.model = Network(out_channels, classes, cell_nr, self.criterion, device, in_channels=input_channels)
+            if config.DATASET == 'fraud':
+                self.model = TabularNetwork(config.NODE_NR, config.FRAUD_DETECTION_IN_DIM, config.CLASSES, config.CELL_NR, self.criterion, device)
+            else:
+                self.model = Network(out_channels, classes, cell_nr, self.criterion, device, in_channels=input_channels, steps=config.NODE_NR)
             self.model = self.model.to(device)
             self.optimizer = torch.optim.SGD(self.model.parameters(), 0.01, 0.9, 3e-4)
             self.train_loader = DataLoader(train_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)

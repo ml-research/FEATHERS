@@ -28,7 +28,7 @@ def _test(net, testloader, writer, round, stage='search'):
     correct, total, loss = 0, 0, 0.0
     net.eval()
     with torch.no_grad():
-        for feats, labels in testloader:
+        for i, (feats, labels) in enumerate(testloader):
             #feats = feats.type(torch.FloatTensor)
             #labels = labels.type(torch.LongTensor)
             feats, labels = feats.to(DEVICE), labels.to(DEVICE)

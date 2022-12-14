@@ -163,11 +163,11 @@ class Network(nn.Module):
 
 
 class TabularMixedOp(nn.Module):
-  def __init__(self, in_dim, out_dim):
+  def __init__(self, dim):
     super(TabularMixedOp, self).__init__()
     self._ops = nn.ModuleList()
     for primitive in TABULAR_PRIMITIVES:
-      op = TABOPS[primitive](in_dim, out_dim)
+      op = TABOPS[primitive](dim, dim)
       self._ops.append(op)
 
   def forward(self, x, weights):
@@ -175,47 +175,53 @@ class TabularMixedOp(nn.Module):
 
 class TabularCell(nn.Module):
   def __init__(self, steps, out_prev_prev, out_prev, out_curr, reduction, reduction_prev):
-    super(Cell, self).__init__()
+    super(TabularCell, self).__init__()
     self.reduction = reduction
     self.reduction_prev = reduction_prev
 
     if reduction_prev:
-      self.preprocess = lambda x: x
-    else:
       self.preprocess = nn.Linear(out_prev_prev, out_prev)
+    else:
+      self.preprocess = Identity()
+    if reduction:
+      self.reduction = nn.Sequential(
+        nn.Linear(out_prev, out_curr),
+        nn.ReLU()
+      )
+    else:
+      self.reduction = Identity()
+    self.postprocess = nn.Linear((steps + 2)*out_curr, out_curr) # reduce size to out_curr
     self._steps = steps
 
     self._ops = nn.ModuleList()
     self._bns = nn.ModuleList()
     for i in range(self._steps):
       for j in range(2+i):
-        op = TabularMixedOp(out_prev, out_curr)
+        op = TabularMixedOp(out_curr)
         self._ops.append(op)
 
   def forward(self, s0, s1, weights):
-    if self.reduction_prev:
-      s1 = self.preprocess(s1)
-    else:
-      s0 = self.preprocess(s0)
+    s0 = self.preprocess(s0)
 
-    states = [s0, s1]
+    states = [self.reduction(s0), self.reduction(s1)]
     offset = 0
     for i in range(self._steps):
       s = sum(self._ops[offset+j](h, weights[offset+j]) for j, h in enumerate(states))
       offset += len(states)
       states.append(s)
 
-    return torch.cat(states[-self._multiplier:], dim=1)
+    return self.postprocess(torch.cat(states, dim=1))
 
 
 class TabularNetwork(nn.Module):
   def __init__(self, steps, in_dim, num_classes, layers, criterion, device):
-    super(Network, self).__init__()
+    super(TabularNetwork, self).__init__()
     self.in_dime = in_dim
     self._num_classes = num_classes
     self._layers = layers
     self._criterion = criterion
     self.device = device
+    self._steps = steps
  
     dim_prev_prev, dim_prev, dim_curr = in_dim, in_dim, in_dim
     self.cells = nn.ModuleList()
@@ -244,7 +250,7 @@ class TabularNetwork(nn.Module):
       else:
         weights = F.softmax(self.alphas_normal, dim=-1)
       s0, s1 = s1, cell(s0, s1, weights)
-    logits = self.classifier()
+    logits = self.classifier(s1)
     return logits
 
   def _loss(self, input, target):
@@ -274,14 +280,14 @@ class TabularNetwork(nn.Module):
       for i in range(self._steps):
         end = start + n
         W = weights[start:end].copy()
-        edges = sorted(range(i + 2), key=lambda x: -max(W[x][k] for k in range(len(W[x])) if k != PRIMITIVES.index('none')))[:2]
+        edges = sorted(range(i + 2), key=lambda x: -max(W[x][k] for k in range(len(W[x])) if k != TABULAR_PRIMITIVES.index('none')))[:2]
         for j in edges:
           k_best = None
           for k in range(len(W[j])):
-            if k != PRIMITIVES.index('none'):
+            if k != TABULAR_PRIMITIVES.index('none'):
               if k_best is None or W[j][k] > W[j][k_best]:
                 k_best = k
-          gene.append((PRIMITIVES[k_best], j))
+          gene.append((TABULAR_PRIMITIVES[k_best], j))
         start = end
         n += 1
       return gene
@@ -289,7 +295,7 @@ class TabularNetwork(nn.Module):
     gene_normal = _parse(F.softmax(self.alphas_normal, dim=-1).data.cpu().numpy())
     gene_reduce = _parse(F.softmax(self.alphas_reduce, dim=-1).data.cpu().numpy())
 
-    concat = range(2+self._steps-self._multiplier, self._steps+2)
+    concat = range(2+self._steps, self._steps+2)
     genotype = Genotype(
       normal=gene_normal, normal_concat=concat,
       reduce=gene_reduce, reduce_concat=concat

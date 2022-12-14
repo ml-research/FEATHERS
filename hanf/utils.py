@@ -1,4 +1,4 @@
-import os
+import os, sys
 import numpy as np
 import torch
 import shutil
@@ -8,7 +8,7 @@ from torch.utils.data import random_split, Subset
 import torchvision
 import math
 import json
-from ..datasets.fraud_detection import FraudDetectionData
+from fraud_detection import FraudDetectionData
 
 class Loader:
 
@@ -88,8 +88,8 @@ class FraudDetection(Loader):
 
     def __init__(self, n_clients, indspath, skew=0) -> None:
        super().__init__(n_clients, indspath, skew)
-       self.train_data = FraudDetectionData('../../../datasets/ccFraud/', train=True)
-       self.val_data = FraudDetectionData('../../../datasets/ccFraud/', train=False)
+       self.train_data = FraudDetectionData('../datasets/ccFraud/', train=True)
+       self.val_data = FraudDetectionData('../datasets/ccFraud/', train=False)
 
 
 def get_dataset_loder(dataset, num_clients, indspath, skew=0):
