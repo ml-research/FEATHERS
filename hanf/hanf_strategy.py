@@ -6,6 +6,7 @@ import pandas as pd
 from numproto import proto_to_ndarray, ndarray_to_proto
 from scipy.special import softmax
 from scipy.stats import entropy
+from sklearn.metrics import f1_score
 from helpers import ProtobufNumpyArray, log_model_weights, log_hyper_config, log_hyper_params
 from utils import discounted_mean, get_dataset_loder
 from collections import OrderedDict
@@ -26,6 +27,7 @@ def _test(net, testloader, writer, round, stage='search'):
     """Validate the network on the entire test set."""
     criterion = torch.nn.CrossEntropyLoss()
     correct, total, loss = 0, 0, 0.0
+    f1_micro, f1_macro = 0, 0
     net.eval()
     with torch.no_grad():
         for i, (feats, labels) in enumerate(testloader):
@@ -41,9 +43,13 @@ def _test(net, testloader, writer, round, stage='search'):
             _, predicted = torch.max(preds.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
+            f1_micro += f1_score(labels.detach().cpu().numpy(), predicted.detach().cpu().numpy(), average='micro')
+            f1_macro += f1_score(labels.detach().cpu().numpy(), predicted.detach().cpu().numpy(), average='macro')
     loss /= len(testloader.dataset)
+    f1_micro /= len(testloader)
+    f1_macro /= len(testloader)
     accuracy = correct / total
-    return loss, accuracy
+    return loss, accuracy, f1_micro, f1_macro
 
 
 class HANFStrategy(fl.server.strategy.FedAvg):
@@ -109,6 +115,12 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         fh = logging.FileHandler(os.path.join('./models/' + log_prefix.format(log_id_str), 'log.txt'))
         fh.setFormatter(logging.Formatter(self.log_format))
         logging.getLogger().addHandler(fh)
+
+        # log config file
+        config_string = f'ROUNDS={config.ROUNDS}, ALPHA={config.ALPHA}, GAMMA={config.GAMMA}, HYPERPARAM_NR={config.HYPERPARAM_CONFIG_NR}, BATCH_SIZE={config.BATCH_SIZE}' \
+            f'DATASET={config.DATASET}, CELL_NR={config.CELL_NR}, CLIENT_NR={config.CLIENT_NR}, IN_CHANNELS={config.IN_CHANNELS}, OUT_CHANNELS={config.OUT_CHANNELS}, NODE_NR={config.NODE_NR}' \
+                f'DATA_SKEW={config.DATA_SKEW}, WEIGHTED_SAMPLER={config.USE_WEIGHTED_SAMPLER}, PATH_PROB_PROB={config.DROP_PATH_PROB}'
+        logging.info(config_string)
 
     def aggregate_fit(
         self,
@@ -276,11 +288,13 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.set_parameters(params)
         if self.stage == 'valid':
             self.net.drop_path_prob = config.DROP_PATH_PROB * self.current_round / config.ROUNDS
-        loss, accuracy = _test(self.net, self.test_loader, self.writer, self.current_round, self.stage)
+        loss, accuracy, f1_micro, f1_macro = _test(self.net, self.test_loader, self.writer, self.current_round, self.stage)
 
         # log metrics to tensorboard
         self.writer.add_scalar('Test_Loss', loss, self.current_round)
         self.writer.add_scalar('Test_Accuracy', accuracy, self.current_round)
+        self.writer.add_scalar('Test F1 Micro', f1_micro)
+        self.writer.add_scalar('Test F1 Macro', f1_macro)
         log_model_weights(self.net, self.current_round, self.writer)
 
         # persist model
@@ -293,4 +307,4 @@ class HANFStrategy(fl.server.strategy.FedAvg):
 
         # since evaluate is the last method being called in one round, step rtpt here
         self.rtpt.step()
-        return float(loss), {"accuracy": float(accuracy)}
+        return float(loss), {"accuracy": float(accuracy), "f1_micro": f1_micro, "f1_macro": f1_macro}

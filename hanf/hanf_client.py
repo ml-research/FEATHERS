@@ -5,7 +5,7 @@ import warnings
 import flwr as fl
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from torch.autograd import Variable
 import numpy as np
 from utils import get_dataset_loder
@@ -99,7 +99,8 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
                 self.model = Network(out_channels, classes, cell_nr, self.criterion, device, in_channels=input_channels, steps=config.NODE_NR)
             self.model = self.model.to(device)
             self.optimizer = torch.optim.SGD(self.model.parameters(), 0.01, 0.9, 3e-4)
-            self.train_loader = DataLoader(train_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
+            sampler = self._get_sampler() if config.USE_WEIGHTED_SAMPLER else None
+            self.train_loader = DataLoader(train_data, config.BATCH_SIZE, pin_memory=True, num_workers=2, sampler=sampler)
             self.val_loader = DataLoader(test_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
             self.architect = Architect(self.model, 0.9, 3e-4, 3e-4, 1e-3, device)
 
@@ -157,6 +158,12 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             # update architect's hyperparameters
             self.architect.update_hyperparameters(hyperparam)
 
+        def _get_sampler(training_data):
+            class_count = torch.tensor([len(torch.where(training_data.targets == t)) for t in torch.unique(training_data.targets)])
+            weight = 1 / class_count
+            samples_weight = torch.tensor([weight[t] for t in training_data.targets]).double()
+            sampler = WeightedRandomSampler(samples_weight, len(samples_weight))
+            return sampler
             
     # Start client
     fl.client.start_numpy_client("[::]:{}".format(config.PORT), client=HANFClient())
