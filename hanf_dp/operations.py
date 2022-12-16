@@ -19,6 +19,20 @@ OPS = {
     ),
 }
 
+TABOPS = {
+  'none': lambda in_dim, out_dim: TabZero(),
+  'relu_ln_1': lambda in_dim, out_dim: ReluLN(in_dim, out_dim),
+  'sigmoid_ln_1': lambda in_dim, out_dim: SigmoidLN(in_dim, out_dim),
+  'tanh_ln_1': lambda in_dim, out_dim: TanhLN(in_dim, out_dim),
+  'relu_ln_2_reddim': lambda in_dim, out_dim: ReluLNRedDim(in_dim, out_dim),
+  'relu_ln_2_expdim': lambda in_dim, out_dim: ReluLNExpDim(in_dim, out_dim),
+  'sigmoid_2_reddim': lambda in_dim, out_dim: SimgoidLNRedDim(in_dim, out_dim),
+  'sigmoid_2_expdim': lambda in_dim, out_dim: SigmoidLNExpDim(in_dim, out_dim),
+  'tanh_ln_2_reddim': lambda in_dim, out_dim: TanhLNRedDim(in_dim, out_dim),
+  'tahn_ln_2_expdim': lambda in_dim, out_dim: TanhLNExpDim(in_dim, out_dim),
+  'skip_connect': lambda in_dim, out_dim: Identity(),
+}
+
 class ReLUConvBN(nn.Module):
 
   def __init__(self, C_in, C_out, kernel_size, stride, padding, affine=True):
@@ -103,3 +117,99 @@ class FactorizedReduce(nn.Module):
     out = self.bn(out)
     return out
 
+class TabZero(nn.Module):
+  def __init__(self):
+    super(TabZero, self).__init__()
+
+  def forward(self, x):
+    return x * 0
+
+class ReluLN(nn.Module):
+  def __init__(self, in_dim, out_dim) -> None:
+    super().__init__()
+    self.linear = nn.Linear(in_dim, out_dim)
+
+  def forward(self, x):
+    return torch.relu(self.linear(x))
+
+class SigmoidLN(nn.Module):
+  def __init__(self, in_dim, out_dim) -> None:
+    super().__init__()
+    self.linear = nn.Linear(in_dim, out_dim)
+
+  def forward(self, x):
+    return torch.sigmoid(self.linear(x))
+
+class TanhLN(nn.Module):
+  def __init__(self, in_dim, out_dim) -> None:
+    super().__init__()
+    self.linear = nn.Linear(in_dim, out_dim)
+
+  def forward(self, x):
+    return torch.tanh(self.linear(x))
+
+class ReluLNExpDim(nn.Module):
+  def __init__(self, in_dim, out_dim) -> None:
+    super().__init__()
+    self.linear1 = nn.Linear(in_dim, int(1.25*in_dim))
+    self.linear2 = nn.Linear(int(1.25*in_dim), out_dim)
+
+  def forward(self, x):
+    x = self.linear1(x)
+    x = torch.relu(x)
+    return torch.relu(self.linear2(x))
+
+class SigmoidLNExpDim(nn.Module):
+  def __init__(self, in_dim, out_dim) -> None:
+    super().__init__()
+    self.linear1 = nn.Linear(in_dim, int(1.25*in_dim))
+    self.linear2 = nn.Linear(int(1.25*in_dim), out_dim)
+
+  def forward(self, x):
+    x = self.linear1(x)
+    x = torch.sigmoid(x)
+    return torch.sigmoid(self.linear2(x))
+  
+class TanhLNExpDim(nn.Module):
+  def __init__(self, in_dim, out_dim) -> None:
+    super().__init__()
+    self.linear1 = nn.Linear(in_dim, int(1.25*in_dim))
+    self.linear2 = nn.Linear(int(1.25*in_dim), out_dim)
+
+  def forward(self, x):
+    x = self.linear1(x)
+    x = torch.tanh(x)
+    return torch.tanh(self.linear2(x))
+
+class ReluLNRedDim(nn.Module):
+  def __init__(self, in_dim, out_dim) -> None:
+    super().__init__()
+    self.linear1 = nn.Linear(in_dim, int((in_dim + out_dim) / 2))
+    self.linear2 = nn.Linear(int((in_dim + out_dim) / 2), out_dim)
+
+  def forward(self, x):
+    x = self.linear1(x)
+    x = torch.relu(x)
+    return torch.relu(self.linear2(x))
+
+class SimgoidLNRedDim(nn.Module):
+  def __init__(self, in_dim, out_dim) -> None:
+    super().__init__()
+    self.linear1 = nn.Linear(in_dim, int((in_dim + out_dim) / 2))
+    self.linear2 = nn.Linear(int((in_dim + out_dim) / 2), out_dim)
+
+  def forward(self, x):
+    x = self.linear1(x)
+    x = torch.sigmoid(x)
+    return torch.tanh(self.linear2(x))
+
+class TanhLNRedDim(nn.Module):
+  def __init__(self, in_dim, out_dim) -> None:
+    super().__init__()
+    self.linear1 = nn.Linear(in_dim, int((in_dim + out_dim) / 2))
+    self.linear2 = nn.Linear(int((in_dim + out_dim) / 2), out_dim)
+
+  def forward(self, x):
+    x = self.linear1(x)
+    x = torch.tanh(x)
+    return torch.tanh(self.linear2(x))

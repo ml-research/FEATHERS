@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from operations import *
-from genotypes import PRIMITIVES
+from genotypes import PRIMITIVES, TABULAR_PRIMITIVES
 from genotypes import Genotype
 from opacus.grad_sample import register_grad_sampler
 from typing import Dict
@@ -27,11 +27,27 @@ class ParallelOp(nn.Module):
           operation_outs.append(out)
       return torch.stack(operation_outs)
 
+class TabularParallelOp(nn.Module):
+
+  def __init__(self, dim) -> None:
+    super().__init__()
+    self._ops = nn.ModuleList()
+    for primitive in TABULAR_PRIMITIVES:
+      op = TABOPS[primitive](dim, dim)
+      self._ops.append(op)
+
+  def forward(self, x):
+      operation_outs = []
+      for op in self._ops:
+          out = op(x)
+          operation_outs.append(out)
+      return torch.stack(operation_outs)
+
 class MixedOp(nn.Module):
 
-    def __init__(self):
+    def __init__(self, primitives):
         super(MixedOp, self).__init__()
-        self.alphas = nn.Parameter(torch.zeros(len(PRIMITIVES)), requires_grad=True)
+        self.alphas = nn.Parameter(torch.zeros(len(primitives)), requires_grad=True)
 
     def forward(self, x):
         weights = torch.softmax(self.alphas, 0)
@@ -133,8 +149,8 @@ class Network(nn.Module):
 
   def _init_mixed_ops(self):
     k = sum(1 for i in range(self._steps) for n in range(2+i))
-    self.mixed_ops_normal = [MixedOp() for _ in range(k)]
-    self.mixed_ops_reduce = [MixedOp() for _ in range(k)]
+    self.mixed_ops_normal = [MixedOp(PRIMITIVES) for _ in range(k)]
+    self.mixed_ops_reduce = [MixedOp(PRIMITIVES) for _ in range(k)]
 
   def genotype(self):
 
@@ -169,8 +185,137 @@ class Network(nn.Module):
     )
     return genotype
 
+class TabularCell(nn.Module):
+  def __init__(self, steps, out_prev_prev, out_prev, out_curr, reduction, reduction_prev, mixed_ops_normal, mixed_ops_reduce):
+    super(TabularCell, self).__init__()
+    self.reduction = reduction
+    self.reduction_prev = reduction_prev
+
+    if reduction_prev:
+      self.preprocess = nn.Linear(out_prev_prev, out_prev)
+    else:
+      self.preprocess = Identity()
+    if reduction:
+      self.reduction = nn.Sequential(
+        nn.Linear(out_prev, out_curr),
+        nn.ReLU()
+      )
+    else:
+      self.reduction = Identity()
+    self.postprocess = nn.Linear((steps + 2)*out_curr, out_curr) # reduce size to out_curr
+    self._steps = steps
+
+    self._ops = nn.ModuleList()
+    self._bns = nn.ModuleList()
+    mixed_op_idx = 0
+    for i in range(self._steps):
+      for j in range(2+i):
+        if reduction:
+          op = nn.Sequential(TabularParallelOp(out_curr), mixed_ops_reduce[mixed_op_idx])
+        else:
+          op = nn.Sequential(TabularParallelOp(out_curr), mixed_ops_normal[mixed_op_idx])
+        mixed_op_idx += 1
+        self._ops.append(op)
+
+  def forward(self, s0, s1):
+    s0 = self.preprocess(s0)
+
+    states = [self.reduction(s0), self.reduction(s1)]
+    offset = 0
+    for i in range(self._steps):
+      s = sum(self._ops[offset+j](h) for j, h in enumerate(states))
+      offset += len(states)
+      states.append(s)
+
+    return self.postprocess(torch.cat(states, dim=1))
+
+class TabularNetwork(nn.Module):
+  def __init__(self, steps, in_dim, num_classes, layers, criterion, device):
+    super(TabularNetwork, self).__init__()
+    self.in_dime = in_dim
+    self._num_classes = num_classes
+    self._layers = layers
+    self._criterion = criterion
+    self.device = device
+    self._steps = steps
+ 
+    dim_prev_prev, dim_prev, dim_curr = in_dim, in_dim, in_dim
+    self.cells = nn.ModuleList()
+    reduction_prev = False
+    self._init_mixed_ops()
+    for i in range(layers):
+      if i in [layers//3, 2*layers//3]:
+        dim_curr = int(dim_curr * 0.8)
+        reduction = True
+      else:
+        reduction = False
+      cell = TabularCell(steps, dim_prev_prev, dim_prev, dim_curr, 
+                      reduction=reduction, reduction_prev=reduction_prev,
+                      mixed_ops_normal=self.mixed_ops_normal, mixed_ops_reduce=self.mixed_ops_reduce)
+      reduction_prev = reduction
+      self.cells += [cell]
+      dim_prev_prev, dim_prev = dim_prev, dim_curr
+
+    self.classifier = nn.Linear(dim_prev, num_classes)
+
+  def forward(self, input):
+    s0 = s1 = input
+    for i, cell in enumerate(self.cells):
+      s0, s1 = s1, cell(s0, s1)
+    logits = self.classifier(s1)
+    return logits
+
+  def _loss(self, input, target):
+    logits = self(input)
+    return self._criterion(logits, target)
+
+  def _init_mixed_ops(self):
+    k = sum(1 for i in range(self._steps) for n in range(2+i))
+    self.mixed_ops_normal = [MixedOp(TABULAR_PRIMITIVES) for _ in range(k)]
+    self.mixed_ops_reduce = [MixedOp(TABULAR_PRIMITIVES) for _ in range(k)]
+
+  def arch_parameters(self):
+    return self._arch_parameters
+
+  def genotype(self):
+
+    def _parse(weights):
+      gene = []
+      n = 2
+      start = 0
+      for i in range(self._steps):
+        end = start + n
+        W = weights[start:end].copy()
+        edges = sorted(range(i + 2), key=lambda x: -max(W[x][k] for k in range(len(W[x])) if k != PRIMITIVES.index('none')))[:2]
+        for j in edges:
+          k_best = None
+          for k in range(len(W[j])):
+            if k != TABULAR_PRIMITIVES.index('none'):
+              if k_best is None or W[j][k] > W[j][k_best]:
+                k_best = k
+          gene.append((PRIMITIVES[k_best], j))
+        start = end
+        n += 1
+      return gene
+
+    alphas_normal = torch.stack([mop.alphas.data for mop in self.mixed_ops_normal])
+    alphas_reduce = torch.stack([mop.alphas.data for mop in self.mixed_ops_reduce])
+    gene_normal = _parse(F.softmax(alphas_normal, dim=-1).data.cpu().numpy())
+    gene_reduce = _parse(F.softmax(alphas_reduce, dim=-1).data.cpu().numpy())
+
+    concat = range(2+self._steps-self._multiplier, self._steps+2)
+    genotype = Genotype(
+      normal=gene_normal, normal_concat=concat,
+      reduce=gene_reduce, reduce_concat=concat
+    )
+    return genotype
+
 @register_grad_sampler(ParallelOp)
 def grad_sampler_parallel_op(layer: MixedOp, activations: torch.Tensor, backprops: torch.Tensor):
+    return {}
+
+@register_grad_sampler(TabularParallelOp)
+def grad_sampler_tabular_parallel_op(layer: MixedOp, activations: torch.Tensor, backprops: torch.Tensor):
     return {}
 
 @register_grad_sampler(MixedOp)
