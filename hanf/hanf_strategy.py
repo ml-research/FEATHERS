@@ -44,7 +44,8 @@ def _test(net, testloader, writer, round, stage='search'):
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
             f1_micro += f1_score(labels.detach().cpu().numpy(), predicted.detach().cpu().numpy(), average='micro')
-            f1_macro += f1_score(labels.detach().cpu().numpy(), predicted.detach().cpu().numpy(), average='macro')
+            macro_avg = 'macro' if config.CLASSES > 2 else None
+            f1_macro += f1_score(labels.detach().cpu().numpy(), predicted.detach().cpu().numpy(), average=macro_avg)
     loss /= len(testloader.dataset)
     f1_micro /= len(testloader)
     f1_macro /= len(testloader)
@@ -293,8 +294,8 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         # log metrics to tensorboard
         self.writer.add_scalar('Test_Loss', loss, self.current_round)
         self.writer.add_scalar('Test_Accuracy', accuracy, self.current_round)
-        self.writer.add_scalar('Test F1 Micro', f1_micro)
-        self.writer.add_scalar('Test F1 Macro', f1_macro)
+        self.writer.add_scalar('Test_F1_Micro', f1_micro)
+        self.writer.add_scalar('Test_F1_Macro', f1_macro)
         log_model_weights(self.net, self.current_round, self.writer)
 
         # persist model
