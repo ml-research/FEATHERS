@@ -57,7 +57,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
 
     def __init__(self, fraction_fit, fraction_eval, initial_net, 
                 log_dir='./runs/', use_gain_avg=False, alpha=0.1, baseline_discount=0.9, gamma=4,
-                exploration_mode='greedy', stage='search', **args) -> None:
+                exploration_mode='greedy', stage='search', rounds=100, **args) -> None:
         """
         Intitialize the HANF strategy used by flwr to aggregation of model parameters.
 
@@ -81,7 +81,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.net.to(DEVICE)
         initial_params = [param.cpu().detach().numpy() for _, param in self.net.state_dict().items()]
         self.initial_parameters = self.last_weights = fl.common.weights_to_parameters(initial_params)
-        dataset_iterator = get_dataset_loder(config.DATASET, config.CLIENT_NR, config.DATASET_INDS_FILE, config.DATA_SKEW)
+        dataset_iterator = get_dataset_loder(config.DATASET, config.CLIENT_NR, config.DATASET_INDS_FILE, config.DATA_SKEW, config.TRAIN_SUBSET, config.VAL_SUBSET)
         dataset_iterator.partition() # distribute data
         self.test_data = dataset_iterator.load_server_data()
         self.test_loader = DataLoader(self.test_data, batch_size=config.BATCH_SIZE, pin_memory=True, num_workers=2)
@@ -110,7 +110,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         logging.basicConfig(stream=sys.stdout, level=logging.INFO,
         format=self.log_format, datefmt='%m/%d %I:%M:%S %p')
         log_prefix = 'run_{}' if stage == 'search' else 'run_valid_{}'
-        log_id_str = f'{config.DATASET}_{config.CLIENT_NR}_{config.DATA_SKEW}_{self.date}'
+        log_id_str = f'{config.DATASET}_{config.CLIENT_NR}_{config.DATA_SKEW}_{self.date}_ho'
         if not os.path.exists('./models/' + log_prefix.format(log_id_str)):
             os.mkdir('./models/' + log_prefix.format(log_id_str))
         fh = logging.FileHandler(os.path.join('./models/' + log_prefix.format(log_id_str), 'log.txt'))
@@ -118,7 +118,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         logging.getLogger().addHandler(fh)
 
         # log config file
-        config_string = f'ROUNDS={config.ROUNDS}, ALPHA={config.ALPHA}, GAMMA={config.GAMMA}, HYPERPARAM_NR={config.HYPERPARAM_CONFIG_NR}, BATCH_SIZE={config.BATCH_SIZE}' \
+        config_string = f'ROUNDS={rounds}, ALPHA={self.alpha}, GAMMA={self.gamma}, HYPERPARAM_NR={config.HYPERPARAM_CONFIG_NR}, BATCH_SIZE={config.BATCH_SIZE}' \
             f'DATASET={config.DATASET}, CELL_NR={config.CELL_NR}, CLIENT_NR={config.CLIENT_NR}, IN_CHANNELS={config.IN_CHANNELS}, OUT_CHANNELS={config.OUT_CHANNELS}, NODE_NR={config.NODE_NR}' \
                 f'DATA_SKEW={config.DATA_SKEW}, WEIGHTED_SAMPLER={config.USE_WEIGHTED_SAMPLER}, PATH_PROB_PROB={config.DROP_PATH_PROB}'
         logging.info(config_string)

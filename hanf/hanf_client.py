@@ -76,7 +76,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
     """Create model, load data, define Flower client, start Flower client."""
 
     # Load data
-    data_loader = get_dataset_loder(dataset, num_clients, config.DATASET_INDS_FILE, config.DATA_SKEW)
+    data_loader = get_dataset_loder(dataset, num_clients, config.DATASET_INDS_FILE, config.DATA_SKEW, config.TRAIN_SUBSET, config.VAL_SUBSET)
     train_data, test_data = data_loader.load_client_data(client_id)
     date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
     writer = SummaryWriter("./runs/Client_{}".format(date))

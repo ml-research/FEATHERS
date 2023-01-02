@@ -70,11 +70,17 @@ class FashionMNISTLoader(Loader):
 
 class CIFAR10Loader(Loader):
 
-    def __init__(self, n_clients, indspath, skew=0) -> None:
+    def __init__(self, n_clients, indspath, skew=0, use_train_subset=None, use_val_subset=None) -> None:
         super().__init__(n_clients, indspath, skew)
         transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize((0,), (1,))])
         self.train_data = torchvision.datasets.CIFAR10('../../../datasets/cifar10/', download=True, train=True, transform=transform)
         self.val_data = torchvision.datasets.CIFAR10('../../../datasets/cifar10/', download=True, train=False, transform=transform)
+        if use_train_subset is not None and use_train_subset > 0 and use_train_subset < 1:
+            idx = np.random.randint(0, len(self.train_data), int(use_train_subset*len(self.train_data)))
+            self.train_data = Subset(self.train_data, idx)
+        if use_val_subset is not None and use_val_subset > 0 and use_val_subset < 1:
+            idx = np.random.randint(0, len(self.val_data), int(use_train_subset*len(self.val_data)))
+            self.train_data = Subset(self.val_data, idx)
 
 class ImageNet(Loader):
 
@@ -92,11 +98,11 @@ class FraudDetection(Loader):
        self.val_data = FraudDetectionData('../datasets/ccFraud/', train=False)
 
 
-def get_dataset_loder(dataset, num_clients, indspath, skew=0):
+def get_dataset_loder(dataset, num_clients, indspath, skew=0, use_train_subset=None, use_val_subset=None):
     if dataset == 'fmnist':
         return FashionMNISTLoader(num_clients, indspath, skew=skew)
     elif dataset == 'cifar10':
-        return CIFAR10Loader(num_clients, indspath, skew=skew)
+        return CIFAR10Loader(num_clients, indspath, skew=skew, use_train_subset=use_train_subset, use_val_subset=use_val_subset)
     elif dataset == 'imagenet':
         return ImageNet(num_clients, indspath, skew=skew)
     elif dataset == 'fraud':

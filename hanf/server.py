@@ -9,8 +9,8 @@ from helpers import prepare_log_dirs
 import argparse
 from genotypes import GENOTYPE
 
-def start_server_search(rounds):
-    device = torch.device('cuda:{}'.format(str(config.SERVER_GPU))) 
+def start_server_search(rounds, gpu, alpha, gamma):
+    device = torch.device('cuda:{}'.format(str(gpu))) 
     criterion = nn.CrossEntropyLoss()
     if config.DATASET == 'fraud':
         net = TabularNetwork(config.NODE_NR, config.FRAUD_DETECTION_IN_DIM, config.CLASSES, config.CELL_NR, criterion, device=device)
@@ -25,12 +25,13 @@ def start_server_search(rounds):
         fraction_fit=0.5,
         fraction_eval=0.5,
         initial_net=net,
-        alpha=config.ALPHA,
+        alpha=alpha,
         min_fit_clients=config.MIN_TRAIN_CLIENTS,
         min_eval_clients=config.MIN_VAL_CLIENTS,
         min_available_clients=config.CLIENT_NR,
         stage='search',
-        gamma=config.GAMMA,
+        gamma=gamma,
+        rounds=rounds,
     )
 
     # Start server
@@ -74,10 +75,15 @@ def start_server_valid(rounds):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--stage', default='search', type=str)
+    parser.add_argument('--alpha', type=float, default=1)
+    parser.add_argument('--gamma', type=float, default=2)
+    parser.add_argument('--rounds', type=int, default=100)
+    parser.add_argument('--gpu', type=int)
 
     args = parser.parse_args()
+
     if args.stage == 'search':
-        start_server_search(config.ROUNDS)
+        start_server_search(args.rounds, args.gpu, args.alpha, args.gamma)
     elif args.stage == 'valid':
         start_server_valid(config.ROUNDS)
     else:
