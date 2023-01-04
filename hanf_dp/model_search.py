@@ -274,9 +274,6 @@ class TabularNetwork(nn.Module):
     self.mixed_ops_normal = [MixedOp(TABULAR_PRIMITIVES) for _ in range(k)]
     self.mixed_ops_reduce = [MixedOp(TABULAR_PRIMITIVES) for _ in range(k)]
 
-  def arch_parameters(self):
-    return self._arch_parameters
-
   def genotype(self):
 
     def _parse(weights):
@@ -286,14 +283,14 @@ class TabularNetwork(nn.Module):
       for i in range(self._steps):
         end = start + n
         W = weights[start:end].copy()
-        edges = sorted(range(i + 2), key=lambda x: -max(W[x][k] for k in range(len(W[x])) if k != PRIMITIVES.index('none')))[:2]
+        edges = sorted(range(i + 2), key=lambda x: -max(W[x][k] for k in range(len(W[x])) if k != TABULAR_PRIMITIVES.index('none')))[:2]
         for j in edges:
           k_best = None
           for k in range(len(W[j])):
             if k != TABULAR_PRIMITIVES.index('none'):
               if k_best is None or W[j][k] > W[j][k_best]:
                 k_best = k
-          gene.append((PRIMITIVES[k_best], j))
+          gene.append((TABULAR_PRIMITIVES[k_best], j))
         start = end
         n += 1
       return gene
@@ -303,7 +300,7 @@ class TabularNetwork(nn.Module):
     gene_normal = _parse(F.softmax(alphas_normal, dim=-1).data.cpu().numpy())
     gene_reduce = _parse(F.softmax(alphas_reduce, dim=-1).data.cpu().numpy())
 
-    concat = range(2+self._steps-self._multiplier, self._steps+2)
+    concat = range(2+self._steps, self._steps+2)
     genotype = Genotype(
       normal=gene_normal, normal_concat=concat,
       reduce=gene_reduce, reduce_concat=concat

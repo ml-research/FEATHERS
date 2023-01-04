@@ -2,7 +2,7 @@ import flwr as fl
 from hanf_strategy import HANFStrategy
 import torch.nn as nn
 import torch
-from model_search import Network
+from model_search import Network, TabularNetwork
 from model import NetworkCIFAR, NetworkImageNet
 import config
 from helpers import prepare_log_dirs
@@ -13,7 +13,11 @@ from opacus import PrivacyEngine
 def start_server_search(rounds):
     device = torch.device('cuda:{}'.format(str(config.SERVER_GPU))) 
     criterion = nn.CrossEntropyLoss()
-    net = Network(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, criterion, device, in_channels=config.IN_CHANNELS)
+    if config.DATASET == 'fraud':
+        net = TabularNetwork(config.NODE_NR, config.FRAUD_DETECTION_IN_DIM, config.CLASSES, config.CELL_NR, criterion, device=device)
+    else:        
+        net = Network(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, criterion, device, in_channels=config.IN_CHANNELS, steps=config.NODE_NR)
+
     net = net.to(device)
     model = PrivacyEngine.get_compatible_module(net)
 
@@ -27,6 +31,7 @@ def start_server_search(rounds):
         fraction_eval=0.5,
         initial_net=model,
         alpha=config.ALPHA,
+        gamma=config.GAMMA,
         min_fit_clients=config.MIN_TRAIN_CLIENTS,
         min_eval_clients=config.MIN_VAL_CLIENTS,
         min_available_clients=config.CLIENT_NR,

@@ -16,7 +16,7 @@ from hyperparameters import Hyperparameters
 from tensorboardX import SummaryWriter
 from datetime import datetime as dt
 import argparse
-from model_search import Network
+from model_search import Network, TabularNetwork
 from architect import Architect
 from opacus import PrivacyEngine
 from opacus.validators import ModuleValidator
@@ -62,7 +62,6 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, 
                 input_search, target_search = next(iter(valid_bmm))
                 input_search = input_search.to(device, non_blocking=True)
                 target_search = target_search.to(device, non_blocking=True)
-
                 architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=False)
 
                 # sync model (arch -> model)
@@ -111,7 +110,10 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             self.hyperparameters.read_from_csv(config.HYPERPARAM_FILE)
             self.criterion = torch.nn.CrossEntropyLoss()
             self.criterion = self.criterion.to(device)
-            self.model = Network(out_channels, classes, cell_nr, self.criterion, device, in_channels=input_channels)
+            if config.DATASET == 'fraud':
+                self.model = TabularNetwork(config.NODE_NR, config.FRAUD_DETECTION_IN_DIM, config.CLASSES, config.CELL_NR, self.criterion, device)
+            else:
+                self.model = Network(out_channels, classes, cell_nr, self.criterion, device, in_channels=input_channels, steps=config.NODE_NR)
             arch_model = deepcopy(self.model) # since opcaus cannot register multiple hooks to the same model, we have to instantiate two models and sync them after each step
             model_optim = torch.optim.SGD(get_params(self.model, 'model'), 0.01, 0.9, 3e-4)
             arch_optim = torch.optim.Adam(get_params(arch_model, 'arch'),
@@ -125,7 +127,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
                                                     data_loader=self.train_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
             arch_model, _, self.val_loader = pe.make_private(module=arch_model, optimizer=arch_optim, 
                                                     data_loader=self.val_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
-            dp_arch_optim = DPOptimizer(arch_optim, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM, expected_batch_size=config.BATCH_SIZE)
+            dp_arch_optim = DPOptimizer(arch_optim, noise_multiplier=2., max_grad_norm=config.MAX_GRAD_NORM, expected_batch_size=config.BATCH_SIZE)
 
             self.model = self.model.to(device)
             arch_model = arch_model.to(device)

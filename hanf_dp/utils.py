@@ -1,4 +1,4 @@
-import os
+import os, sys
 import numpy as np
 import torch
 import shutil
@@ -8,8 +8,8 @@ from torch.utils.data import random_split, Subset
 import torchvision
 import math
 import json
-# from ..datasets.fraud_detection import FraudDetection
-from torch import nn
+from fraud_detection import FraudDetectionData
+import torch.nn as nn
 
 class Loader:
 
@@ -85,13 +85,13 @@ class ImageNet(Loader):
         self.train_data = torchvision.datasets.CIFAR10('../../../datasets/imagenet/', download=True, train=True, transform=transform)
         self.val_data = torchvision.datasets.CIFAR10('../../../datasets/imagenet/', download=True, train=False, transform=transform)
 
-#class FraudDetection(Loader):
-#
-#    def __init__(self, n_clients, indspath, skew=0) -> None:
-#       super().__init__(n_clients, indspath, skew)
-#       self.train_data = FraudDetection('../../../datasets/ccFraud/', train=True)
-#       self.val_data = FraudDetection('../../../datasets/ccFraud/', train=False)
-#
+class FraudDetection(Loader):
+
+    def __init__(self, n_clients, indspath, skew=0) -> None:
+       super().__init__(n_clients, indspath, skew)
+       self.train_data = FraudDetectionData('../datasets/ccFraud/', train=True)
+       self.val_data = FraudDetectionData('../datasets/ccFraud/', train=False)
+
 
 def get_dataset_loder(dataset, num_clients, indspath, skew=0):
     if dataset == 'fmnist':
@@ -100,6 +100,8 @@ def get_dataset_loder(dataset, num_clients, indspath, skew=0):
         return CIFAR10Loader(num_clients, indspath, skew=skew)
     elif dataset == 'imagenet':
         return ImageNet(num_clients, indspath, skew=skew)
+    elif dataset == 'fraud':
+        return FraudDetection(num_clients, indspath, skew=skew)
     else:
         raise ValueError('{} is not supported'.format(dataset))
 

@@ -288,8 +288,11 @@ class HANFStrategy(fl.server.strategy.FedAvg):
 
         # log current genotype if we are in architecture search phase
         if self.stage == 'search':
-            modules = list(self.net.modules())
-            model = [module for module in modules if type(module) == Network][0]
+            if config.DATASET != 'fraud':
+                modules = list(self.net.modules())
+                model = [module for module in modules if type(module) == Network][0]
+            else:
+                model = self.net
             genotype = model.genotype()
             logging.info('genotype = %s', genotype)
 

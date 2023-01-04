@@ -17,15 +17,15 @@ REINIT = False # reinitailize model if no improvement was made
 
 # model initilization parameters
 CLASSES = 2 # number of output-classes
-CELL_NR = 3 # number of cells the search space consists of (if search phase). Else number of cells of the network
+CELL_NR = 4 # number of cells the search space consists of (if search phase). Else number of cells of the network
 IN_CHANNELS = 3 # mumber of input-channels (e.g. 3 for rgb-images)
 OUT_CHANNELS = 16 # number of output-channels
 NODE_NR = 7 # number of nodes per cell
 FRAUD_DETECTION_IN_DIM = 7
 
 PORT = '8045'
-GPUS = [2, 3] # GPUs to use
-SERVER_GPU = 2
+GPUS = [0, 1, 2] # GPUs to use
+SERVER_GPU = 3
 
 DATA_SKEW = 0 # skew of labels. 0 = no skew, 1 only some clients hold some labels
 USE_WEIGHTED_SAMPLER = True # use a weighted random sampler to account for class imbalances 
