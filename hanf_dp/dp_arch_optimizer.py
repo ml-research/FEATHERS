@@ -129,7 +129,7 @@ def _generate_noise(
             generator=generator,
         )
 
-class DPOptimizer(torch.optim.Optimizer):
+class DPArchOptimizer(torch.optim.Optimizer):
     """
     ``torch.optim.Optimizer`` wrapper that adds additional functionality to clip per
     sample gradients and add Gaussian noise.

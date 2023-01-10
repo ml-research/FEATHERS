@@ -30,7 +30,7 @@ class Architect(object):
     unrolled_model = self._construct_model_from_theta(theta.sub(eta, moment+dtheta))
     return unrolled_model
 
-  def step(self, input_train, target_train, input_valid, target_valid, eta, network_optimizer, unrolled):
+  def step(self, input_train, target_train, input_valid, target_valid, eta, network_optimizer, unrolled, num_model_param_groups):
     self.optimizer.zero_grad()
     if unrolled:
         self._backward_step_unrolled(input_train, target_train, input_valid, target_valid, eta, network_optimizer)

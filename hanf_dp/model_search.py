@@ -41,7 +41,7 @@ class TabularParallelOp(nn.Module):
       for op in self._ops:
           out = op(x)
           operation_outs.append(out)
-      return torch.stack(operation_outs)
+      return torch.stack(operation_outs).transpose(0, 1)
 
 class MixedOp(nn.Module):
 
@@ -51,7 +51,7 @@ class MixedOp(nn.Module):
 
     def forward(self, x):
         weights = torch.softmax(self.alphas, 0)
-        return sum(w * op_out for w, op_out in zip(weights, x))
+        return sum(w * op_out for w, op_out in zip(weights, x.transpose(0, 1)))
 
 
 class Cell(nn.Module):
@@ -341,10 +341,10 @@ def grad_sampler_mixed_op(layer: MixedOp, activations: torch.Tensor, backprops: 
   j_sftmx_trans = j_sftmx_trans.to(device=device)
   
   # d = c = number of operations, b = number of batches
-  sftmx_grad = torch.einsum('dc,cb...->db...', j_sftmx_trans, activations) # we sum over columns since we have the transposed jacobian of softmax w.r.t. inputs
+  sftmx_grad = torch.einsum('dc,cb...->db...', j_sftmx_trans, activations.transpose(0, 1)) # we sum over columns since we have the transposed jacobian of softmax w.r.t. inputs
   final_grad = torch.einsum('db...,b...->db', sftmx_grad, backprops) # apply chain rule and multiply softmax-gradients with the gradient coming from the next layer
   #grad = torch.einsum('nbcwh,bcwh->nb', activations, backprops)
   ret = {
-      layer.alphas: final_grad
+      layer.alphas: final_grad.t()
   }
   return ret

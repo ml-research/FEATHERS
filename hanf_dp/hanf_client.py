@@ -21,7 +21,7 @@ from architect import Architect
 from opacus import PrivacyEngine
 from opacus.validators import ModuleValidator
 from opacus.utils.batch_memory_manager import BatchMemoryManager
-from dp_arch_optimizer import DPOptimizer
+from dp_arch_optimizer import DPArchOptimizer
 
 warnings.filterwarnings("ignore", category=UserWarning)
 EPOCHS = 1
@@ -45,39 +45,39 @@ def _test(net, testloader, device):
     accuracy = correct / total
     return loss, accuracy
 
-def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, device):
+def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, device, num_model_param_groups):
 
-    #with BatchMemoryManager(data_loader=train_queue, 
-    #            max_physical_batch_size=config.BATCH_SIZE, optimizer=optimizer) as train_bmm:
-    #    
-    #    with BatchMemoryManager(data_loader=valid_queue,
-    #            max_physical_batch_size=config.BATCH_SIZE, optimizer=architect.optimizer) as valid_bmm:
-    for step, (input, target) in enumerate(train_queue):
-        if step % 50 == 0:
-            print(f'Step {step:03d}')
-        model.train()
-        input = input.to(device, non_blocking=True)
-        target = target.to(device, non_blocking=True)
-        # get a random minibatch from the search queue with replacement
-        input_search, target_search = next(iter(valid_queue))
-        input_search = input_search.to(device, non_blocking=True)
-        target_search = target_search.to(device, non_blocking=True)
+    with BatchMemoryManager(data_loader=train_queue, 
+               max_physical_batch_size=config.BATCH_SIZE, optimizer=optimizer) as train_bmm:
+       
+       with BatchMemoryManager(data_loader=valid_queue,
+               max_physical_batch_size=config.BATCH_SIZE, optimizer=architect.optimizer) as valid_bmm:
+            for step, (input, target) in enumerate(train_bmm):
+                if step % 10 == 0:
+                    print(f'Step {step:03d}')
+                model.train()
+                input = input.to(device, non_blocking=True)
+                target = target.to(device, non_blocking=True)
+                # get a random minibatch from the search queue with replacement
+                input_search, target_search = next(iter(valid_bmm))
+                input_search = input_search.to(device, non_blocking=True)
+                target_search = target_search.to(device, non_blocking=True)
 
-        # set parameter-lr zero during arch. step
-        optimizer, plr = set_optimizer_lr(optimizer, 'params')
-        architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=False)
+                # set parameter-lr zero during arch. step
+                optimizer, plr = set_optimizer_lr(optimizer, 'params')
+                architect.step(input, target, input_search, target_search, lr, optimizer, False, num_model_param_groups)
 
-        # reset parameter-lr and set arch. lr zero
-        optimizer, _ = set_optimizer_lr(optimizer, 'params', plr)
-        optimizer, alr = set_optimizer_lr(optimizer, 'arch_params')
-        optimizer.zero_grad()
-        logits = model(input)
-        loss = criterion(logits, target)
-        loss.backward()
-        nn.utils.clip_grad_norm(model.parameters(), 5.)
-        optimizer.step()
-        optimizer, _ = set_optimizer_lr(optimizer, 'arch_params', alr)
-        model.zero_grad()
+                # reset parameter-lr and set arch. lr zero
+                optimizer, _ = set_optimizer_lr(optimizer, 'params', plr)
+                optimizer, alr = set_optimizer_lr(optimizer, 'arch_params')
+                optimizer.zero_grad()
+                logits = model(input)
+                loss = criterion(logits, target)
+                loss.backward()
+                nn.utils.clip_grad_norm(model.parameters(), 5.)
+                optimizer.step()
+                optimizer, _ = set_optimizer_lr(optimizer, 'arch_params', alr)
+                model.zero_grad()
   
     return model, optimizer
 
@@ -125,18 +125,19 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
                 model = Network(out_channels, classes, cell_nr, self.criterion, device, in_channels=input_channels, steps=config.NODE_NR)
             model_params = get_params(model, 'model')
             arch_params = get_params(model, 'arch')
+            self.num_model_param_groups = len(model_params)
             optim = torch.optim.SGD([
                 {'params': model_params, 'lr': 0.01, 'weight_decay': 3e-4, 'momentum': 0.9},
-                {'params': arch_params, 'lr': 3e-4, 'weight_decay': 1e-3, 'momentum': 0.9}], lr=0.01)
+                {'params': arch_params, 'lr': 3e-4, 'weight_decay': 1e-3, 'momentum': 0.9}], lr=0.01, momentum=0.9, weight_decay=3e-4)
             sampler = self._get_sampler(train_data) if config.USE_WEIGHTED_SAMPLER else None
             self.train_loader = DataLoader(train_data, config.BATCH_SIZE, pin_memory=True, sampler=sampler, num_workers=2)
             self.val_loader = DataLoader(test_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
             #self.model = ModuleValidator.fix(self.model) # required to replace modules not supported by opacus (e.g. BatchNorm)
             #ModuleValidator.validate(self.model, strict=False)
             pe = PrivacyEngine()
-            _, _, self.val_loader = pe.make_private(module=deepcopy(model), optimizer=optim, 
+            _, _, self.val_loader = pe.make_private(module=deepcopy(model), optimizer=optim, batch_first=True,
                                                     data_loader=self.val_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
-            self.model, self.optimizer, self.train_loader = pe.make_private(module=model, optimizer=optim,
+            self.model, self.optimizer, self.train_loader = pe.make_private(module=model, optimizer=optim, batch_first=True,
                                                    data_loader=self.train_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
 
             self.model = self.model.to(device)
@@ -166,21 +167,15 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             self.model.load_state_dict(state_dict, strict=True)
 
         def fit(self, parameters, flwr_config):
-            print("==================== ENTER FIT ===================")
             self.set_parameters_train(parameters, flwr_config)
-            print("PARAMETERS SET")
             before_loss, _ = _test(self.model, self.val_loader, device)
-            print("BEFORE COMPUTED")
             for e in range(EPOCHS):
                 rtpt.step()
                 self.epoch += 1
-                print("TRAIN ONE EPOCH")
                 self.model, self.optimizer = train(self.train_loader, self.val_loader, self.model,
                                                  self.architect, self.criterion, self.optimizer, 
-                                                 self.hyperparam_config['learning_rate'], device)
-            print("TRAINING DONE")
+                                                 self.hyperparam_config['learning_rate'], device, self.num_model_param_groups)
             after_loss, _ = _test(self.model, self.val_loader, device)
-            print("AFTER COMPUTED")
             model_params = self.get_parameters()
             return model_params, len(train_data), {'hidx': int(self.hidx), 'before': float(before_loss), 'after': float(after_loss)}
 
