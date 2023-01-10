@@ -20,6 +20,7 @@ import logging
 import os
 import sys
 from model_search import Network
+from sklearn.metrics import f1_score
 
 DEVICE = torch.device("cuda:{}".format(str(config.SERVER_GPU)) if torch.cuda.is_available() else "cpu")
 
@@ -27,6 +28,7 @@ def _test(net, testloader, writer, round, stage='search'):
     """Validate the network on the entire test set."""
     criterion = torch.nn.CrossEntropyLoss()
     correct, total, loss = 0, 0, 0.0
+    f1_micro, f1_macro = 0, 0
     net.eval()
     with torch.no_grad():
         for feats, labels in testloader:
@@ -42,9 +44,13 @@ def _test(net, testloader, writer, round, stage='search'):
             _, predicted = torch.max(preds.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
+            f1_micro += f1_score(labels.detach().cpu().numpy(), predicted.detach().cpu().numpy(), average='micro')
+            f1_macro += f1_score(labels.detach().cpu().numpy(), predicted.detach().cpu().numpy(), average='macro')
     loss /= len(testloader.dataset)
+    f1_micro /= len(testloader)
+    f1_macro /= len(testloader)
     accuracy = correct / total
-    return loss, accuracy
+    return loss, accuracy, f1_micro, f1_macro
 
 
 class HANFStrategy(fl.server.strategy.FedAvg):
@@ -276,11 +282,13 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.set_parameters(params)
         if self.stage == 'valid':
             self.net.drop_path_prob = config.DROP_PATH_PROB * self.current_round / config.ROUNDS
-        loss, accuracy = _test(self.net, self.test_loader, self.writer, self.current_round, self.stage)
+        loss, accuracy, f1_micro, f1_macro = _test(self.net, self.test_loader, self.writer, self.current_round, self.stage)
 
         # log metrics to tensorboard
         self.writer.add_scalar('Test_Loss', loss, self.current_round)
         self.writer.add_scalar('Test_Accuracy', accuracy, self.current_round)
+        self.writer.add_scalar('Test_F1_Micro', f1_micro)
+        self.writer.add_scalar('Test_F1_Macro', f1_macro)
         log_model_weights(self.net, self.current_round, self.writer)
 
         # persist model
@@ -298,4 +306,4 @@ class HANFStrategy(fl.server.strategy.FedAvg):
 
         # since evaluate is the last method being called in one round, step rtpt here
         self.rtpt.step()
-        return float(loss), {"accuracy": float(accuracy)}
+        return float(loss), {"accuracy": float(accuracy), "f1_micro": f1_micro, "f1_macro": f1_macro}

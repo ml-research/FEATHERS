@@ -19,7 +19,7 @@ def start_server_search(rounds):
         net = Network(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, criterion, device, in_channels=config.IN_CHANNELS, steps=config.NODE_NR)
 
     net = net.to(device)
-    model = PrivacyEngine.get_compatible_module(net)
+    model = net #PrivacyEngine.get_compatible_module(net)
 
 
     # prepare log-directories

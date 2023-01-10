@@ -10,9 +10,9 @@ LOG_DIR = './runs/'
 
 # server parameters
 DATASET = 'fraud' # dataset to use. Alternatives: cifar10
-CLIENT_NR = 2
-MIN_TRAIN_CLIENTS = 2 # min. number of clients used during fit
-MIN_VAL_CLIENTS = 2 # min. number of clients used during evaluation
+CLIENT_NR = 1
+MIN_TRAIN_CLIENTS = 1 # min. number of clients used during fit
+MIN_VAL_CLIENTS = 1 # min. number of clients used during evaluation
 REINIT = False # reinitailize model if no improvement was made
 
 # model initilization parameters
@@ -28,6 +28,7 @@ GPUS = [1, 2] # GPUs to use
 SERVER_GPU = 2
 
 DATA_SKEW = 0 # skew of labels. 0 = no skew, 1 only some clients hold some labels
+USE_WEIGHTED_SAMPLER = True
 
 # Differential Privacy
 MAX_GRAD_NORM = 1.
