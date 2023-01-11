@@ -123,6 +123,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
                 model = TabularNetwork(config.NODE_NR, config.FRAUD_DETECTION_IN_DIM, config.CLASSES, config.CELL_NR, self.criterion, device)
             else:
                 model = Network(out_channels, classes, cell_nr, self.criterion, device, in_channels=input_channels, steps=config.NODE_NR)
+            model = model.to(device)
             model_params = get_params(model, 'model')
             arch_params = get_params(model, 'arch')
             self.num_model_param_groups = len(model_params)
@@ -140,7 +141,6 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             self.model, self.optimizer, self.train_loader = pe.make_private(module=model, optimizer=optim, batch_first=True,
                                                    data_loader=self.train_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
 
-            self.model = self.model.to(device)
             #arch_model = arch_model.to(device)
             self.architect = Architect(self.model, self.optimizer, 0.9, 1e-3, self.criterion, device)
 

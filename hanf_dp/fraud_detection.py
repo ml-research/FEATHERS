@@ -12,7 +12,7 @@ class FraudDetectionData(Dataset):
         data = pd.read_csv(file + 'ccFraud.csv')
         data = data.drop(columns=['custID'])
         np.random.seed(0) # ensure deterministic behavior
-        subsamples = np.random.randint(0, len(data), size=int(0.01*len(data)))
+        subsamples = np.random.randint(0, len(data), size=int(0.005*len(data)))
         data = data.iloc[subsamples, :]
         y = data['fraudRisk'].to_numpy()
         X = data.drop(columns=['fraudRisk']).to_numpy()

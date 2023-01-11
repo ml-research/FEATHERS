@@ -1,5 +1,5 @@
 # hyperparameter configuration parameters
-ROUNDS = 500 # nr. of communication rounds
+ROUNDS = 100 # nr. of communication rounds
 ALPHA = 0.5
 GAMMA = 6
 HYPERPARAM_CONFIG_NR = 120 # size of hyperparameter search space
@@ -10,9 +10,9 @@ LOG_DIR = './runs/'
 
 # server parameters
 DATASET = 'fraud' # dataset to use. Alternatives: cifar10
-CLIENT_NR = 2
-MIN_TRAIN_CLIENTS = 2 # min. number of clients used during fit
-MIN_VAL_CLIENTS = 2 # min. number of clients used during evaluation
+CLIENT_NR = 5
+MIN_TRAIN_CLIENTS = 5 # min. number of clients used during fit
+MIN_VAL_CLIENTS = 5 # min. number of clients used during evaluation
 REINIT = False # reinitailize model if no improvement was made
 
 # model initilization parameters
@@ -24,8 +24,8 @@ NODE_NR = 7 # number of nodes per cell
 FRAUD_DETECTION_IN_DIM = 7
 
 PORT = '8042'
-GPUS = [1, 2] # GPUs to use
-SERVER_GPU = 2
+GPUS = [1, 3] # GPUs to use
+SERVER_GPU = 1
 
 DATA_SKEW = 0 # skew of labels. 0 = no skew, 1 only some clients hold some labels
 USE_WEIGHTED_SAMPLER = True

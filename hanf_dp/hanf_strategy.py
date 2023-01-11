@@ -77,8 +77,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
         log_hyper_params(self.hyperparams.to_dict(), 'hyperparam-logs/hyperparameters_{}.json'.format(self.date))
         self.use_gain_avg = use_gain_avg
-        self.net = initial_net
-        self.net.to(DEVICE)
+        self.net = initial_net.to(DEVICE)
         initial_params = [param.cpu().detach().numpy() for _, param in self.net.state_dict().items()]
         self.initial_parameters = self.last_weights = fl.common.weights_to_parameters(initial_params)
         dataset_iterator = get_dataset_loder(config.DATASET, config.CLIENT_NR, config.DATASET_INDS_FILE, config.DATA_SKEW)
