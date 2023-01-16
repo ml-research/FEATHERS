@@ -137,9 +137,9 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             #ModuleValidator.validate(self.model, strict=False)
             pe = PrivacyEngine()
             _, _, self.val_loader = pe.make_private(module=deepcopy(model), optimizer=optim, batch_first=True,
-                                                    data_loader=self.val_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
+                                                    data_loader=self.val_loader, noise_multiplier=0.5, max_grad_norm=config.MAX_GRAD_NORM)
             self.model, self.optimizer, self.train_loader = pe.make_private(module=model, optimizer=optim, batch_first=True,
-                                                   data_loader=self.train_loader, noise_multiplier=1., max_grad_norm=config.MAX_GRAD_NORM)
+                                                   data_loader=self.train_loader, noise_multiplier=0.5, max_grad_norm=config.MAX_GRAD_NORM)
 
             #arch_model = arch_model.to(device)
             self.architect = Architect(self.model, self.optimizer, 0.9, 1e-3, self.criterion, device)

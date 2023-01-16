@@ -15,8 +15,9 @@ from hyperparameters import Hyperparameters
 from tensorboardX import SummaryWriter
 from datetime import datetime as dt
 import argparse
-from model import NetworkCIFAR, NetworkImageNet
+from model import NetworkCIFAR, NetworkImageNet, NetworkTabular
 from genotypes import GENOTYPE
+from opacus import PrivacyEngine
 
 warnings.filterwarnings("ignore", category=UserWarning)
 EPOCHS = 1
@@ -90,10 +91,15 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
                 self.model = NetworkCIFAR(out_channels, classes, cell_nr, False, genotype=GENOTYPE, device=device, in_channels=input_channels)
             elif config.DATASET == 'imagenet':
                 self.model = NetworkImageNet(out_channels, classes, cell_nr, False, genotype=GENOTYPE, device=device)
+            elif config.DATASET == 'fraud':
+                self.model = NetworkTabular(config.FRAUD_DETECTION_IN_DIM, config.CLASSES, config.CELL_NR, GENOTYPE, device=device)
             self.model = self.model.to(device)
-            self.optimizer = None
+            self.optimizer = torch.optim.SGD(self.model.parameters(), 0.01, momentum=0.99, weight_decay=1e-3)
             self.train_loader = DataLoader(train_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
             self.val_loader = DataLoader(test_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
+            pe = PrivacyEngine()
+            self.model, self.optimizer, self.train_loader = pe.make_private(module=self.model, optimizer=self.optimizer, 
+                                                                    data_loader=self.train_loader, noise_multiplier=0.5, max_grad_norm=config.MAX_GRAD_NORM)
             self.hyperparam_config = None
 
         def get_parameters(self):
@@ -141,14 +147,10 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
         def set_current_hyperparameter_config(self, hyperparam, idx):
             self.hyperparam_config = hyperparam
             self.hidx = idx
-            if self.optimizer is None:
-                self.optimizer = torch.optim.SGD(self.model.parameters(), self.hyperparam_config['learning_rate'], 
-                                                momentum=self.hyperparam_config['momentum'], weight_decay=self.hyperparam_config['weight_decay'])
-            else:
-                for g in self.optimizer.param_groups:
-                    g['lr'] = self.hyperparam_config['learning_rate']
-                    g['momentum'] = self.hyperparam_config['momentum']
-                    g['weight_decay'] = self.hyperparam_config['weight_decay']
+            for g in self.optimizer.param_groups:
+                g['lr'] = self.hyperparam_config['learning_rate']
+                g['momentum'] = self.hyperparam_config['momentum']
+                g['weight_decay'] = self.hyperparam_config['weight_decay']
             
     # Start client
     fl.client.start_numpy_client("[::]:{}".format(config.PORT), client=HANFClient())

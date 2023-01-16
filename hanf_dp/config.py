@@ -23,9 +23,9 @@ OUT_CHANNELS = 16 # number of output-channels
 NODE_NR = 7 # number of nodes per cell
 FRAUD_DETECTION_IN_DIM = 7
 
-PORT = '8042'
-GPUS = [1, 3] # GPUs to use
-SERVER_GPU = 1
+PORT = '8045'
+GPUS = [2, 3] # GPUs to use
+SERVER_GPU = 2
 
 DATA_SKEW = 0 # skew of labels. 0 = no skew, 1 only some clients hold some labels
 USE_WEIGHTED_SAMPLER = True

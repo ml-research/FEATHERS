@@ -4,6 +4,7 @@ from operations import *
 from utils import drop_path
 from opacus.grad_sample import register_grad_sampler
 from typing import Dict
+from operations import OPS, TABOPS
 
 class Cell(nn.Module):
 
@@ -60,6 +61,64 @@ class Cell(nn.Module):
       states += [s]
     return torch.cat([states[i] for i in self._concat], dim=1)
 
+class TabularCell(nn.Module):
+
+  def __init__(self, genotype, out_prev_prev, out_prev, out_curr, reduction, reduction_prev, device):
+    super(Cell, self).__init__()
+    self.device = device
+    self.reduction = reduction
+    self.reduction_prev = reduction_prev
+
+    if reduction_prev:
+      self.preprocess = nn.Linear(out_prev_prev, out_prev)
+    else:
+      self.preprocess = Identity()
+    if reduction:
+      self.reduction = nn.Sequential(
+        nn.Linear(out_prev, out_curr),
+        nn.ReLU()
+      )
+    else:
+      self.reduction = Identity()
+    
+    if reduction:
+      op_names, indices = zip(*genotype.reduce)
+      concat = genotype.reduce_concat
+    else:
+      op_names, indices = zip(*genotype.normal)
+      concat = genotype.normal_concat
+    self._compile(out_curr, op_names, indices, concat, reduction)
+
+  def _compile(self, out_prev, out_curr, op_names, indices, concat, reduction):
+    assert len(op_names) == len(indices)
+    self._steps = len(op_names) // 2
+    self.postprocess = nn.Linear((self._steps + 2)*out_curr, out_curr)
+
+    self._ops = nn.ModuleList()
+    for name, index in zip(op_names, indices):
+      op = TABOPS[name](out_prev, out_curr)
+      self._ops += [op]
+    self._indices = indices
+
+  def forward(self, s0, s1, drop_prob):
+    s0 = self.preprocess(s0)
+
+    states = [self.reduction(s0), self.reduction(s1)]
+    for i in range(self._steps):
+      h1 = states[self._indices[2*i]]
+      h2 = states[self._indices[2*i+1]]
+      op1 = self._ops[2*i]
+      op2 = self._ops[2*i+1]
+      h1 = op1(h1)
+      h2 = op2(h2)
+      if self.training and drop_prob > 0.:
+        if not isinstance(op1, Identity):
+          h1 = drop_path(h1, drop_prob, self.device)
+        if not isinstance(op2, Identity):
+          h2 = drop_path(h2, drop_prob, self.device)
+      s = h1 + h2
+      states += [s]
+    return self.postprocess(torch.cat(states, dim=1))
 
 class AuxiliaryHeadCIFAR(nn.Module):
 
@@ -215,39 +274,71 @@ class NetworkImageNet(nn.Module):
     logits = self.classifier(out.view(out.size(0), -1))
     return logits, logits_aux
 
+class NetworkTabular(nn.Module):
+  def __init__(self, in_dim, num_classes, layers, genotype, device):
+    super(NetworkTabular, self).__init__()
+    self.in_dime = in_dim
+    self._num_classes = num_classes
+    self._layers = layers
+    self.device = device
+    self.drop_path_prob = 0.2
+ 
+    dim_prev_prev, dim_prev, dim_curr = in_dim, in_dim, in_dim
+    self.cells = nn.ModuleList()
+    reduction_prev = False
+    for i in range(layers):
+      if i in [layers//3, 2*layers//3]:
+        dim_curr = int(dim_curr * 0.8)
+        reduction = True
+      else:
+        reduction = False
+      cell = TabularCell(genotype, dim_prev_prev, dim_prev, dim_curr, 
+                      reduction=reduction, reduction_prev=reduction_prev, device=device)
+      reduction_prev = reduction
+      self.cells += [cell]
+      dim_prev_prev, dim_prev = dim_prev, dim_curr
 
-@register_grad_sampler(NetworkCIFAR)
-def compute_linear_grad_sample(
-    layer: nn.Linear, activations: torch.Tensor, backprops: torch.Tensor
-) -> Dict[nn.Parameter, torch.Tensor]:
-    """
-    Computes per sample gradients for ``nn.Linear`` layer
-    Args:
-        layer: Layer
-        activations: Activations
-        backprops: Backpropagations
-    """
-    gs = torch.einsum("n...i,n...j->nij", backprops, activations)
-    ret = {layer.weight: gs}
-    if layer.bias is not None:
-        ret[layer.bias] = torch.einsum("n...k->nk", backprops)
+    self.classifier = nn.Linear(dim_prev, num_classes)
 
-    return ret
+  def forward(self, input):
+    s0 = s1 = input
+    for i, cell in enumerate(self.cells):
+      s0, s1 = s1, cell(s0, s1, self.drop_path_prob)
+    logits = self.classifier(s1)
+    return logits, None
 
-@register_grad_sampler(NetworkImageNet)
-def compute_linear_grad_sample(
-    layer: nn.Linear, activations: torch.Tensor, backprops: torch.Tensor
-) -> Dict[nn.Parameter, torch.Tensor]:
-    """
-    Computes per sample gradients for ``nn.Linear`` layer
-    Args:
-        layer: Layer
-        activations: Activations
-        backprops: Backpropagations
-    """
-    gs = torch.einsum("n...i,n...j->nij", backprops, activations)
-    ret = {layer.weight: gs}
-    if layer.bias is not None:
-        ret[layer.bias] = torch.einsum("n...k->nk", backprops)
-
-    return ret
+#@register_grad_sampler(NetworkCIFAR)
+#def compute_linear_grad_sample(
+#    layer: nn.Linear, activations: torch.Tensor, backprops: torch.Tensor
+#) -> Dict[nn.Parameter, torch.Tensor]:
+#    """
+#    Computes per sample gradients for ``nn.Linear`` layer
+#    Args:
+#        layer: Layer
+#        activations: Activations
+#        backprops: Backpropagations
+#    """
+#    gs = torch.einsum("n...i,n...j->nij", backprops, activations)
+#    ret = {layer.weight: gs}
+#    if layer.bias is not None:
+#        ret[layer.bias] = torch.einsum("n...k->nk", backprops)
+#
+#    return ret
+#
+#@register_grad_sampler(NetworkImageNet)
+#def compute_linear_grad_sample(
+#    layer: nn.Linear, activations: torch.Tensor, backprops: torch.Tensor
+#) -> Dict[nn.Parameter, torch.Tensor]:
+#    """
+#    Computes per sample gradients for ``nn.Linear`` layer
+#    Args:
+#        layer: Layer
+#        activations: Activations
+#        backprops: Backpropagations
+#    """
+#    gs = torch.einsum("n...i,n...j->nij", backprops, activations)
+#    ret = {layer.weight: gs}
+#    if layer.bias is not None:
+#        ret[layer.bias] = torch.einsum("n...k->nk", backprops)
+#
+#    return ret
