@@ -55,6 +55,9 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, 
             for step, (input, target) in enumerate(train_bmm):
                 if step % 10 == 0:
                     print(f'Step {step:03d}')
+                    pos = len(target[target == 1])
+                    neg = len(target[target == 0])
+                    print(f'Frac: {pos / (pos + neg)}')
                 model.train()
                 input = input.to(device, non_blocking=True)
                 target = target.to(device, non_blocking=True)
@@ -62,11 +65,9 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, 
                 input_search, target_search = next(iter(valid_bmm))
                 input_search = input_search.to(device, non_blocking=True)
                 target_search = target_search.to(device, non_blocking=True)
-
                 # set parameter-lr zero during arch. step
                 optimizer, plr = set_optimizer_lr(optimizer, 'params')
                 architect.step(input, target, input_search, target_search, lr, optimizer, False, num_model_param_groups)
-
                 # reset parameter-lr and set arch. lr zero
                 optimizer, _ = set_optimizer_lr(optimizer, 'params', plr)
                 optimizer, alr = set_optimizer_lr(optimizer, 'arch_params')
@@ -119,6 +120,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             self.hyperparameters.read_from_csv(config.HYPERPARAM_FILE)
             self.criterion = torch.nn.CrossEntropyLoss()
             self.criterion = self.criterion.to(device)
+            self.dp_sigma_reward = config.DP_SIGMA_REWARD
             if config.DATASET == 'fraud':
                 model = TabularNetwork(config.NODE_NR, config.FRAUD_DETECTION_IN_DIM, config.CLASSES, config.CELL_NR, self.criterion, device)
             else:
@@ -138,7 +140,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             pe = PrivacyEngine()
             _, _, self.val_loader = pe.make_private(module=deepcopy(model), optimizer=optim, batch_first=True,
                                                     data_loader=self.val_loader, noise_multiplier=0.5, max_grad_norm=config.MAX_GRAD_NORM)
-            self.model, self.optimizer, self.train_loader = pe.make_private(module=model, optimizer=optim, batch_first=True,
+            self.model, self.optimizer, _ = pe.make_private(module=model, optimizer=optim, batch_first=True,
                                                    data_loader=self.train_loader, noise_multiplier=0.5, max_grad_norm=config.MAX_GRAD_NORM)
 
             #arch_model = arch_model.to(device)
@@ -177,6 +179,8 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
                                                  self.hyperparam_config['learning_rate'], device, self.num_model_param_groups)
             after_loss, _ = _test(self.model, self.val_loader, device)
             model_params = self.get_parameters()
+            before_loss += self.dp_sigma_reward * np.random.normal(0, 1)
+            after_loss += self.dp_sigma_reward * np.random.normal(0, 1)
             return model_params, len(train_data), {'hidx': int(self.hidx), 'before': float(before_loss), 'after': float(after_loss)}
 
         def evaluate(self, parameters, config):
@@ -201,7 +205,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
 
         def _get_sampler(self, training_data):
             targets = training_data.dataset.y[training_data.indices]
-            class_count = torch.tensor([len(torch.where(targets == t)) for t in torch.unique(targets)])
+            class_count = torch.tensor([len(targets[targets == t]) for t in torch.unique(targets)])
             weight = 1 / class_count
             samples_weight = torch.tensor([weight[t] for t in targets]).double()
             sampler = WeightedRandomSampler(samples_weight, len(samples_weight))

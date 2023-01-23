@@ -23,15 +23,16 @@ OUT_CHANNELS = 16 # number of output-channels
 NODE_NR = 7 # number of nodes per cell
 FRAUD_DETECTION_IN_DIM = 7
 
-PORT = '8045'
-GPUS = [2, 3] # GPUs to use
-SERVER_GPU = 2
+PORT = '8041'
+GPUS = [5, 6] # GPUs to use
+SERVER_GPU = 6
 
 DATA_SKEW = 0 # skew of labels. 0 = no skew, 1 only some clients hold some labels
 USE_WEIGHTED_SAMPLER = True
 
 # Differential Privacy
 MAX_GRAD_NORM = 1.
+DP_SIGMA_REWARD = 1e-3
 
 # validation stage
 DROP_PATH_PROB = 0.2 # probability of dropping a path in cell, similar to dropout

@@ -24,7 +24,7 @@ EPOCHS = 1
 
 def _test(net, testloader, device):
     """Validate the network on the entire test set."""
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = torch.nn.BCELoss() if config.CLASSES == 2 else torch.nn.CrossEntropyLoss()
     correct, total, loss = 0, 0, 0.0
     net.eval()
     with torch.no_grad():
@@ -33,8 +33,16 @@ def _test(net, testloader, device):
             #labels = labels.type(torch.LongTensor)
             feats, labels = feats.to(device), labels.to(device)
             preds = net(feats)
-            loss += criterion(preds, labels).item()
-            _, predicted = torch.max(preds.data, 1)
+            if config.CLASSES > 2:
+                loss += criterion(preds, labels).item()
+                _, predicted = torch.max(preds.data, 1)
+                correct += (predicted == labels).sum().item()
+            else:
+                loss += criterion(preds, labels.float()).item()
+                predicted = preds.data
+                predicted[predicted >= 0.5] = 1
+                predicted[predicted < 0.5] = 0
+                correct += (predicted == labels).sum().item()
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
     accuracy = correct / total
@@ -52,6 +60,10 @@ def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, 
     input_search, target_search = next(iter(valid_queue))
     input_search = input_search.to(device, non_blocking=True)
     target_search = target_search.to(device, non_blocking=True)
+
+    if config.CLASSES == 2:
+        target = target.float()
+        target_search = target_search.float()
 
     architect.step(input, target, input_search, target_search, lr, optimizer, unrolled=False)
 
@@ -91,7 +103,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             self.epoch = 0
             self.hyperparameters = Hyperparameters(config.HYPERPARAM_CONFIG_NR)
             self.hyperparameters.read_from_csv(config.HYPERPARAM_FILE)
-            self.criterion = torch.nn.CrossEntropyLoss()
+            self.criterion = torch.nn.BCELoss() if config.CLASSES == 2 else torch.nn.CrossEntropyLoss()
             self.criterion = self.criterion.to(device)
             if config.DATASET == 'fraud':
                 self.model = TabularNetwork(config.NODE_NR, config.FRAUD_DETECTION_IN_DIM, config.CLASSES, config.CELL_NR, self.criterion, device)

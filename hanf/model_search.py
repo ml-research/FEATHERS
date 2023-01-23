@@ -238,7 +238,10 @@ class TabularNetwork(nn.Module):
       self.cells += [cell]
       dim_prev_prev, dim_prev = dim_prev, dim_curr
 
-    self.classifier = nn.Linear(dim_prev, num_classes)
+    if num_classes == 2:
+      self.classifier = nn.Linear(dim_prev, 1)
+    else:
+      self.classifier = nn.Linear(dim_prev, num_classes)
 
     self._initialize_alphas()
 
@@ -251,7 +254,10 @@ class TabularNetwork(nn.Module):
         weights = F.softmax(self.alphas_normal, dim=-1)
       s0, s1 = s1, cell(s0, s1, weights)
     logits = self.classifier(s1)
-    return logits
+    if self._num_classes == 2:
+      return torch.sigmoid(torch.squeeze(logits))
+    else:
+      return logits
 
   def _loss(self, input, target):
     logits = self(input)

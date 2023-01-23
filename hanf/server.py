@@ -3,7 +3,7 @@ from hanf_strategy import HANFStrategy
 import torch.nn as nn
 import torch
 from model_search import Network, TabularNetwork
-from model import NetworkCIFAR, NetworkImageNet
+from model import NetworkCIFAR, NetworkImageNet, NetworkTabular
 import config
 from helpers import prepare_log_dirs
 import argparse
@@ -46,7 +46,8 @@ def start_server_valid(rounds):
         net = NetworkCIFAR(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, False, GENOTYPE, device=device, in_channels=config.IN_CHANNELS)
     elif config.DATASET == 'imagenet':
         net = NetworkImageNet(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, False, GENOTYPE, device=device)
-    # TODO: Add genotype for fraud detection network
+    elif config.DATASET == 'fraud':
+        net = NetworkTabular(config.FRAUD_DETECTION_IN_DIM, config.CLASSES, config.CELL_NR, GENOTYPE, device=device)
 
     # prepare log-directories
     prepare_log_dirs()
