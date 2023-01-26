@@ -239,8 +239,11 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         df.to_csv('./hyperparam-logs/rewards_{}.csv'.format(self.date))
 
         rewards = np.zeros(len(self.hyperparams))
-        for idx, gain in self.gain_history:
-            rewards[idx] = gain
+        np_gain_hist = np.array(self.gain_history)
+        for idx in np.unique(np_gain_hist[:, 0]):
+            same_idx = np.argwhere(np_gain_hist[:, 0] == idx).squeeze()
+            avg_gain = np.average(np_gain_hist[same_idx, 1])
+            rewards[idx] = avg_gain
         sampled_inds = [i for i, _ in self.gain_history]
         mask = np.zeros(len(self.reward_estimates))
         mask[sampled_inds] = 1

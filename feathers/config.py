@@ -4,6 +4,7 @@ ALPHA = 0.5
 GAMMA = 6
 HYPERPARAM_CONFIG_NR = 120 # size of hyperparameter search space
 BATCH_SIZE = 96
+NAS_STEPS = 30
 
 # logging
 LOG_DIR = './runs/'

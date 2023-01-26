@@ -82,8 +82,8 @@ class ImageNet(Loader):
     def __init__(self, n_clients, indspath, skew=0) -> None:
         super().__init__(n_clients, indspath, skew)
         transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize((0,), (1,))])
-        self.train_data = torchvision.datasets.CIFAR10('../../../datasets/imagenet/', download=True, train=True, transform=transform)
-        self.val_data = torchvision.datasets.CIFAR10('../../../datasets/imagenet/', download=True, train=False, transform=transform)
+        self.train_data = torchvision.datasets.ImageFolder('../../../datasets/tiny-imagenet/train', transform=transform)
+        self.val_data = torchvision.datasets.ImageFolder('../../../datasets/tiny-imagenet/valid', transform=transform)
 
 class FraudDetection(Loader):
 
