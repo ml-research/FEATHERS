@@ -17,22 +17,18 @@ REINIT = False # reinitailize model if no improvement was made
 
 # model initilization parameters
 CLASSES = 2 # number of output-classes
-CELL_NR = 4 # number of cells the search space consists of (if search phase). Else number of cells of the network
-IN_CHANNELS = 1 # mumber of input-channels (e.g. 3 for rgb-images)
+CELL_NR = 8 # number of cells the search space consists of (if search phase). Else number of cells of the network
+IN_CHANNELS = 3 # mumber of input-channels (e.g. 3 for rgb-images)
 OUT_CHANNELS = 16 # number of output-channels
 NODE_NR = 7 # number of nodes per cell
 FRAUD_DETECTION_IN_DIM = 7
 
-PORT = '8041'
+PORT = '8052'
 GPUS = [5, 6] # GPUs to use
-SERVER_GPU = 6
+SERVER_GPU = 5
 
 DATA_SKEW = 0 # skew of labels. 0 = no skew, 1 only some clients hold some labels
-USE_WEIGHTED_SAMPLER = True
-
-# Differential Privacy
-MAX_GRAD_NORM = 1.
-DP_SIGMA_REWARD = 1e-3
+USE_WEIGHTED_SAMPLER = True # use a weighted random sampler to account for class imbalances 
 
 # validation stage
 DROP_PATH_PROB = 0.2 # probability of dropping a path in cell, similar to dropout
