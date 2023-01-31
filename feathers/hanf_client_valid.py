@@ -55,6 +55,12 @@ def train(train_queue, model, criterion, optimizer, device):
     input = input.to(device)
     target = target.to(device)
 
+    if step % 10 == 0:
+        pos = len(target[target == 1])
+        neg = len(target[target == 0])
+        print(f"FRAC = {pos / (pos + neg)}")
+
+
     if config.CLASSES == 2:
         target = target.float()
 

@@ -64,7 +64,7 @@ class Cell(nn.Module):
 class TabularCell(nn.Module):
 
   def __init__(self, genotype, out_prev_prev, out_prev, out_curr, reduction, reduction_prev, device):
-    super(Cell, self).__init__()
+    super(TabularCell, self).__init__()
     self.device = device
     self.reduction = reduction
     self.reduction_prev = reduction_prev
@@ -87,7 +87,7 @@ class TabularCell(nn.Module):
     else:
       op_names, indices = zip(*genotype.normal)
       concat = genotype.normal_concat
-    self._compile(out_curr, op_names, indices, concat, reduction)
+    self._compile(out_prev, out_curr, op_names, indices, concat, reduction)
 
   def _compile(self, out_prev, out_curr, op_names, indices, concat, reduction):
     assert len(op_names) == len(indices)

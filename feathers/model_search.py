@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from operations import *
 from genotypes import PRIMITIVES, TABULAR_PRIMITIVES
-from genotypes import Genotype
+from genotypes import Genotype, TabularGenotype
 
 
 class MixedOp(nn.Module):
@@ -163,147 +163,60 @@ class Network(nn.Module):
 
 
 class TabularMixedOp(nn.Module):
-  def __init__(self, dim):
+  def __init__(self, in_dim, out_dim):
     super(TabularMixedOp, self).__init__()
     self._ops = nn.ModuleList()
     for primitive in TABULAR_PRIMITIVES:
-      op = TABOPS[primitive](dim, dim)
+      op = TABOPS[primitive](in_dim, out_dim)
       self._ops.append(op)
 
   def forward(self, x, weights):
     return sum(w * op(x) for w, op in zip(weights, self._ops))
 
-class TabularCell(nn.Module):
-  def __init__(self, steps, out_prev_prev, out_prev, out_curr, reduction, reduction_prev):
-    super(TabularCell, self).__init__()
-    self.reduction = reduction
-    self.reduction_prev = reduction_prev
-
-    if reduction_prev:
-      self.preprocess = nn.Linear(out_prev_prev, out_prev)
-    else:
-      self.preprocess = Identity()
-    if reduction:
-      self.reduction = nn.Sequential(
-        nn.Linear(out_prev, out_curr),
-        nn.ReLU()
-      )
-    else:
-      self.reduction = Identity()
-    self.postprocess = nn.Linear((steps + 2)*out_curr, out_curr) # reduce size to out_curr
-    self._steps = steps
-
-    self._ops = nn.ModuleList()
-    self._bns = nn.ModuleList()
-    for i in range(self._steps):
-      for j in range(2+i):
-        op = TabularMixedOp(out_curr)
-        self._ops.append(op)
-
-  def forward(self, s0, s1, weights):
-    s0 = self.preprocess(s0)
-
-    states = [self.reduction(s0), self.reduction(s1)]
-    offset = 0
-    for i in range(self._steps):
-      s = sum(self._ops[offset+j](h, weights[offset+j]) for j, h in enumerate(states))
-      offset += len(states)
-      states.append(s)
-
-    return self.postprocess(torch.cat(states, dim=1))
-
 
 class TabularNetwork(nn.Module):
-  def __init__(self, steps, in_dim, num_classes, layers, criterion, device):
-    super(TabularNetwork, self).__init__()
-    self.in_dime = in_dim
-    self._num_classes = num_classes
-    self._layers = layers
-    self._criterion = criterion
+  def __init__(self, in_dims, out_dims, classes, criterion, device):
+    super().__init__()
+    assert len(in_dims) == len(out_dims)
     self.device = device
-    self._steps = steps
- 
-    dim_prev_prev, dim_prev, dim_curr = in_dim, in_dim, in_dim
+    self.classes = classes
+    self._criterion = criterion
     self.cells = nn.ModuleList()
-    reduction_prev = False
-    for i in range(layers):
-      if i in [layers//3, 2*layers//3]:
-        dim_curr = int(dim_curr * 0.8)
-        reduction = True
-      else:
-        reduction = False
-      cell = TabularCell(steps, dim_prev_prev, dim_prev, dim_curr, 
-                      reduction=reduction, reduction_prev=reduction_prev)
-      reduction_prev = reduction
-      self.cells += [cell]
-      dim_prev_prev, dim_prev = dim_prev, dim_curr
-
-    if num_classes == 2:
-      self.classifier = nn.Linear(dim_prev, 1)
+    for in_dim, out_dim in zip(in_dims, out_dims):
+      mop = TabularMixedOp(in_dim, out_dim)
+      self.cells.append(mop)
+    
+    if classes == 2:
+      self.linear = nn.Linear(out_dims[-1], 1)
     else:
-      self.classifier = nn.Linear(dim_prev, num_classes)
+      self.linear = nn.Linear(out_dims[-1], classes)
 
-    self._initialize_alphas()
+    num_cells = len(in_dims)
+    self.alphas = nn.Parameter(1e-3*torch.randn(num_cells, len(TABULAR_PRIMITIVES)).to(self.device))
 
-  def forward(self, input):
-    s0 = s1 = input
+  def forward(self, x):
     for i, cell in enumerate(self.cells):
-      if cell.reduction:
-        weights = F.softmax(self.alphas_reduce, dim=-1)
-      else:
-        weights = F.softmax(self.alphas_normal, dim=-1)
-      s0, s1 = s1, cell(s0, s1, weights)
-    logits = self.classifier(s1)
-    if self._num_classes == 2:
-      return torch.sigmoid(torch.squeeze(logits))
+      weights = self.alphas[i, :]
+      x = cell(x, weights)
+    
+    if self.classes == 2:
+      return torch.sigmoid(torch.squeeze(self.linear(x)))
     else:
-      return logits
+      return self.linear(x)
+
 
   def _loss(self, input, target):
     logits = self(input)
     return self._criterion(logits, target) 
 
-  def _initialize_alphas(self):
-    k = sum(1 for i in range(self._steps) for n in range(2+i))
-    num_ops = len(TABULAR_PRIMITIVES)
-
-    self.alphas_normal = nn.Parameter(1e-3*torch.randn(k, num_ops).to(self.device), requires_grad=True)
-    self.alphas_reduce = nn.Parameter(1e-3*torch.randn(k, num_ops).to(self.device), requires_grad=True)
-    self._arch_parameters = [
-      self.alphas_normal,
-      self.alphas_reduce,
-    ]
-
   def arch_parameters(self):
-    return self._arch_parameters
+    return [self.alphas]
 
   def genotype(self):
-
-    def _parse(weights):
-      gene = []
-      n = 2
-      start = 0
-      for i in range(self._steps):
-        end = start + n
-        W = weights[start:end].copy()
-        edges = sorted(range(i + 2), key=lambda x: -max(W[x][k] for k in range(len(W[x])) if k != TABULAR_PRIMITIVES.index('none')))[:2]
-        for j in edges:
-          k_best = None
-          for k in range(len(W[j])):
-            if k != TABULAR_PRIMITIVES.index('none'):
-              if k_best is None or W[j][k] > W[j][k_best]:
-                k_best = k
-          gene.append((TABULAR_PRIMITIVES[k_best], j))
-        start = end
-        n += 1
-      return gene
-
-    gene_normal = _parse(F.softmax(self.alphas_normal, dim=-1).data.cpu().numpy())
-    gene_reduce = _parse(F.softmax(self.alphas_reduce, dim=-1).data.cpu().numpy())
-
-    concat = range(2+self._steps, self._steps+2)
-    genotype = Genotype(
-      normal=gene_normal, normal_concat=concat,
-      reduce=gene_reduce, reduce_concat=concat
-    )
+    weights = self.alphas # ignore zero-operation
+    _, ops = torch.max(weights, dim=1)
+    arch = []
+    for idx in ops:
+      arch.append(TABULAR_PRIMITIVES[idx])
+    genotype = TabularGenotype(architecture=arch)
     return genotype
