@@ -91,7 +91,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
     data_loader = get_dataset_loder(dataset, num_clients, config.DATASET_INDS_FILE, config.DATA_SKEW)
     train_data, test_data = data_loader.load_client_data(client_id)
     date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
-    writer = SummaryWriter("./runs/Client_{}".format(date))
+    # writer = SummaryWriter("./runs/Client_{}".format(date))
     rtpt = RTPT('JS', 'HANF_Client', EPOCHS)
     rtpt.start()
 
