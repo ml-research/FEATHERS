@@ -1,9 +1,5 @@
 # hyperparameter configuration parameters
-<<<<<<< HEAD
 ROUNDS = 2500 # nr. of communication rounds
-=======
-ROUNDS = 500 # nr. of communication rounds
->>>>>>> 7624067e92f83ac3bcb7ff8ced9ec058d1e1c68a
 ALPHA = 0.5
 GAMMA = 6
 HYPERPARAM_CONFIG_NR = 120 # size of hyperparameter search space
