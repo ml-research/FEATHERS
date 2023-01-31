@@ -1,5 +1,5 @@
 # hyperparameter configuration parameters
-ROUNDS = 100 # nr. of communication rounds
+ROUNDS = 500 # nr. of communication rounds
 ALPHA = 0.5
 GAMMA = 6
 HYPERPARAM_CONFIG_NR = 120 # size of hyperparameter search space
@@ -17,15 +17,15 @@ REINIT = False # reinitailize model if no improvement was made
 
 # model initilization parameters
 CLASSES = 2 # number of output-classes
-CELL_NR = 4 # number of cells the search space consists of (if search phase). Else number of cells of the network
+CELL_NR = 14 # number of cells the search space consists of (if search phase). Else number of cells of the network
 IN_CHANNELS = 1 # mumber of input-channels (e.g. 3 for rgb-images)
 OUT_CHANNELS = 16 # number of output-channels
 NODE_NR = 7 # number of nodes per cell
 FRAUD_DETECTION_IN_DIM = 7
 
-PORT = '8051'
-GPUS = [5, 6] # GPUs to use
-SERVER_GPU = 6
+PORT = '8050'
+GPUS = [5, 7] # GPUs to use
+SERVER_GPU = 5
 
 DATA_SKEW = 0 # skew of labels. 0 = no skew, 1 only some clients hold some labels
 USE_WEIGHTED_SAMPLER = True

@@ -106,7 +106,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             self.criterion = torch.nn.BCELoss() if config.CLASSES == 2 else torch.nn.CrossEntropyLoss()
             self.criterion = self.criterion.to(device)
             if config.DATASET == 'fraud':
-                self.model = TabularNetwork(config.NODE_NR, config.FRAUD_DETECTION_IN_DIM, config.CLASSES, config.CELL_NR, self.criterion, device)
+                self.model = TabularNetwork(config.NET_IN_DIMS, config.NET_OUT_DIMS, config.CLASSES, self.criterion, device)
             else:
                 self.model = Network(out_channels, classes, cell_nr, self.criterion, device, in_channels=input_channels, steps=config.NODE_NR)
             self.model = self.model.to(device)

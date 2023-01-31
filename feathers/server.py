@@ -11,9 +11,9 @@ from genotypes import GENOTYPE
 
 def start_server_search(rounds):
     device = torch.device('cuda:{}'.format(str(config.SERVER_GPU))) 
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.BCELoss() if config.CLASSES == 2 else nn.CrossEntropyLoss()
     if config.DATASET == 'fraud':
-        net = TabularNetwork(config.NODE_NR, config.FRAUD_DETECTION_IN_DIM, config.CLASSES, config.CELL_NR, criterion, device=device)
+        net = TabularNetwork(config.NET_IN_DIMS, config.NET_OUT_DIMS, config.CLASSES, criterion, device=device)
     else:        
         net = Network(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, criterion, device, in_channels=config.IN_CHANNELS, steps=config.NODE_NR)
 

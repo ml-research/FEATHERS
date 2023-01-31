@@ -20,17 +20,12 @@ OPS = {
 }
 
 TABOPS = {
-  'none': lambda in_dim, out_dim: TabZero(),
   'relu_ln_1': lambda in_dim, out_dim: ReluLN(in_dim, out_dim),
   'sigmoid_ln_1': lambda in_dim, out_dim: SigmoidLN(in_dim, out_dim),
   'tanh_ln_1': lambda in_dim, out_dim: TanhLN(in_dim, out_dim),
   'relu_ln_2_reddim': lambda in_dim, out_dim: ReluLNRedDim(in_dim, out_dim),
-  'relu_ln_2_expdim': lambda in_dim, out_dim: ReluLNExpDim(in_dim, out_dim),
   'sigmoid_2_reddim': lambda in_dim, out_dim: SimgoidLNRedDim(in_dim, out_dim),
-  'sigmoid_2_expdim': lambda in_dim, out_dim: SigmoidLNExpDim(in_dim, out_dim),
   'tanh_ln_2_reddim': lambda in_dim, out_dim: TanhLNRedDim(in_dim, out_dim),
-  'tahn_ln_2_expdim': lambda in_dim, out_dim: TanhLNExpDim(in_dim, out_dim),
-  'skip_connect': lambda in_dim, out_dim: Identity(),
 }
 
 class ReLUConvBN(nn.Module):

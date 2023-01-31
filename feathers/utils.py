@@ -137,7 +137,7 @@ def partition_data(train_set, val_set, n_clients):
 
     return train_partitions, val_partitions, test
 
-def label_distribution_skew(x, y, partitions, skew=1):
+def label_distribution_skew(y, partitions, skew=1):
     def runner_split(N_labels, N_runners):
         """number of labels to assign to n clients"""
         runner_labels = round(max(1, N_labels / N_runners))
@@ -168,7 +168,7 @@ def label_distribution_skew(x, y, partitions, skew=1):
             runn_inds.append(partition)
     
     selected = np.array(selected_inds)
-    mask = np.zeros(len(x))
+    mask = np.zeros(len(y))
     mask[selected] = 1
     not_selected = np.argwhere(mask == 0)
     return runn_inds, not_selected
@@ -203,8 +203,8 @@ def partition_skewed(train_set, val_set, partitions, randomise=True, skew=0):
             val_subs_inds.append(v)
     else:
         # build skewed data-sets
-        train_selected, train_inds_remain = label_distribution_skew(train_set.data, train_set.targets, partitions, skew)
-        val_selected, val_inds_remain = label_distribution_skew(val_set.data, val_set.targets, partitions, skew)
+        train_selected, train_inds_remain = label_distribution_skew(train_set.targets, partitions, skew)
+        val_selected, val_inds_remain = label_distribution_skew(val_set.targets, partitions, skew)
         # if skew < 1 this will contain a list of all data-points that are not already assigned to some runner
         train_uniform = uniform_distribution(train_inds_remain, partitions, randomise)
         val_uniform = uniform_distribution(val_inds_remain, partitions, randomise)
