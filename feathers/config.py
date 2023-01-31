@@ -1,6 +1,6 @@
 # hyperparameter configuration parameters
 ROUNDS = 2500 # nr. of communication rounds
-ALPHA = 0.5
+ALPHA = 0.3
 GAMMA = 6
 HYPERPARAM_CONFIG_NR = 120 # size of hyperparameter search space
 BATCH_SIZE = 128
@@ -10,14 +10,14 @@ NAS_STEPS = 30
 LOG_DIR = './runs/'
 
 # server parameters
-DATASET = 'fraud' # dataset to use. Alternatives: cifar10, fmnist, imagenet, fraud
+DATASET = 'imagenet' # dataset to use. Alternatives: cifar10, fmnist, imagenet, fraud
 CLIENT_NR = 5
 MIN_TRAIN_CLIENTS = 5 # min. number of clients used during fit
 MIN_VAL_CLIENTS = 5 # min. number of clients used during evaluation
 REINIT = False # reinitailize model if no improvement was made
 
 # model initilization parameters
-CLASSES = 2 # number of output-classes
+CLASSES = 200 # number of output-classes
 CELL_NR = 14 # number of cells the search space consists of (if search phase). Else number of cells of the network
 IN_CHANNELS = 3 # mumber of input-channels (e.g. 3 for rgb-images)
 OUT_CHANNELS = 48 # number of output-channels
@@ -27,8 +27,8 @@ FRAUD_DETECTION_IN_DIM = 7
 NET_IN_DIMS = [7, 5, 3]
 NET_OUT_DIMS = [5, 3, 2]
 
-PORT = '8050'
-GPUS = [5, 7] # GPUs to use
+PORT = '8061'
+GPUS = [9, 10, 11, 14] # GPUs to use
 SERVER_GPU = 5
 
 DATA_SKEW = 0 # skew of labels. 0 = no skew, 1 only some clients hold some labels

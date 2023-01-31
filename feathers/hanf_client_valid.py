@@ -55,11 +55,6 @@ def train(train_queue, model, criterion, optimizer, device):
     input = input.to(device)
     target = target.to(device)
 
-    if step % 10 == 0:
-        pos = len(target[target == 1])
-        neg = len(target[target == 0])
-        print(f"FRAC = {pos / (pos + neg)}")
-
 
     if config.CLASSES == 2:
         target = target.float()
@@ -92,7 +87,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
     train_data, test_data = data_loader.load_client_data(client_id)
     date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
     writer = SummaryWriter("./runs/Client_val_{}".format(date))
-    rtpt = RTPT('JS', 'HANF_Client', EPOCHS)
+    rtpt = RTPT('JS', 'FEATHERS_Client', EPOCHS)
     rtpt.start()
 
     # Flower client

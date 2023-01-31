@@ -94,7 +94,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.current_round = 0
         tb_log_prefix = 'Server_{}' if stage == 'search' else 'Server_valid_{}'
         self.writer = SummaryWriter(log_dir + tb_log_prefix.format(self.date))
-        self.rtpt = RTPT('JS', 'HANF_Server', config.ROUNDS)
+        self.rtpt = RTPT('JS', 'FEATHERS_Server', config.ROUNDS)
         self.rtpt.start()
         self.reward_estimates = np.zeros(len(self.hyperparams))
         self.alpha = alpha

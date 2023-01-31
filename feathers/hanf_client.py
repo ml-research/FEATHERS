@@ -92,7 +92,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
     train_data, test_data = data_loader.load_client_data(client_id)
     date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
     # writer = SummaryWriter("./runs/Client_{}".format(date))
-    rtpt = RTPT('JS', 'HANF_Client', EPOCHS)
+    rtpt = RTPT('JS', 'FEATHERS_Client', EPOCHS)
     rtpt.start()
 
     # Flower client
