@@ -11,9 +11,9 @@ LOG_DIR = './runs/'
 
 # server parameters
 DATASET = 'fraud' # dataset to use. Alternatives: cifar10, fmnist, imagenet, fraud
-CLIENT_NR = 5
-MIN_TRAIN_CLIENTS = 5 # min. number of clients used during fit
-MIN_VAL_CLIENTS = 5 # min. number of clients used during evaluation
+CLIENT_NR = 10
+MIN_TRAIN_CLIENTS = 10 # min. number of clients used during fit
+MIN_VAL_CLIENTS = 10 # min. number of clients used during evaluation
 REINIT = False # reinitailize model if no improvement was made
 
 # model initilization parameters
@@ -27,9 +27,9 @@ FRAUD_DETECTION_IN_DIM = 7
 NET_IN_DIMS = [7, 5, 3]
 NET_OUT_DIMS = [5, 3, 2]
 
-PORT = '8050'
-GPUS = [5, 7] # GPUs to use
-SERVER_GPU = 5
+PORT = '8022'
+GPUS = [3, 4] # GPUs to use
+SERVER_GPU = 3
 
 DATA_SKEW = 0 # skew of labels. 0 = no skew, 1 only some clients hold some labels
 USE_WEIGHTED_SAMPLER = True # use a weighted random sampler to account for class imbalances 

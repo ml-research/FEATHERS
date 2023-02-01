@@ -275,37 +275,31 @@ class NetworkImageNet(nn.Module):
     return logits, logits_aux
 
 class NetworkTabular(nn.Module):
-  def __init__(self, in_dim, num_classes, layers, genotype, device):
+  def __init__(self, in_dims, out_dims, num_classes, genotype, device):
     super(NetworkTabular, self).__init__()
-    self.in_dime = in_dim
-    self._num_classes = num_classes
-    self._layers = layers
-    self.device = device
-    self.drop_path_prob = 0.2
- 
-    dim_prev_prev, dim_prev, dim_curr = in_dim, in_dim, in_dim
-    self.cells = nn.ModuleList()
-    reduction_prev = False
-    for i in range(layers):
-      if i in [layers//3, 2*layers//3]:
-        dim_curr = int(dim_curr * 0.8)
-        reduction = True
-      else:
-        reduction = False
-      cell = TabularCell(genotype, dim_prev_prev, dim_prev, dim_curr, 
-                      reduction=reduction, reduction_prev=reduction_prev, device=device)
-      reduction_prev = reduction
-      self.cells += [cell]
-      dim_prev_prev, dim_prev = dim_prev, dim_curr
+    assert len(in_dims) == len(out_dims)
+    assert len(in_dims) == len(genotype.architecture)
+    self.num_classes = num_classes
+    self.layers = nn.ModuleList()
+    for i in range(0, len(genotype.architecture)):
+      indim = in_dims[i]
+      outdim = out_dims[i]
+      op = genotype.architecture[i]
+      layer = TABOPS[op](indim, outdim)
+      self.layers.append(layer)
 
-    self.classifier = nn.Linear(dim_prev, num_classes)
+    if num_classes == 2:
+      self.linear = nn.Linear(out_dims[-1], 1)
+    else:
+      self.linear = nn.Linear(out_dims[-1], num_classes)
 
-  def forward(self, input):
-    s0 = s1 = input
-    for i, cell in enumerate(self.cells):
-      s0, s1 = s1, cell(s0, s1, self.drop_path_prob)
-    logits = self.classifier(s1)
-    return logits, None
+  def forward(self, x):
+    for op in self.layers:
+      x = op(x)
+    if self.num_classes == 2:
+      return torch.sigmoid(torch.squeeze(self.linear(x))), None
+    else:
+      return self.linear(x), None
 
 #@register_grad_sampler(NetworkCIFAR)
 #def compute_linear_grad_sample(

@@ -8,9 +8,9 @@ class Hyperparameters:
            'learning_rate': np.round(10 ** (np.random.uniform(-3, -1)), 4),
            'weight_decay': np.round(10.0 ** np.random.uniform(low=-4.0, high=-2.0), 6),
            'momentum': np.round(np.random.uniform(low=0.6, high=1.0), 2),
-           'dropout': np.round(np.random.uniform(low=0, high=0.2), 2),
-           #'arch_learning_rate': np.round(10 ** (np.random.uniform(-4, -2)), 5), # for search-phase
-           #'arch_weight_decay': np.round(10.0 ** np.random.uniform(low=-4.0, high=-2.0), 5), # for search-phase
+           #'dropout': np.round(np.random.uniform(low=0, high=0.2), 2),
+           'arch_learning_rate': np.round(10 ** (np.random.uniform(-4, -2)), 5), # for search-phase
+           'arch_weight_decay': np.round(10.0 ** np.random.uniform(low=-4.0, high=-2.0), 5), # for search-phase
         }
         #self.sample_hyperparams = lambda: {
         #    'learning_rate': 0.025,

@@ -213,92 +213,29 @@ class NetworkImageNet(nn.Module):
     logits = self.classifier(out.view(out.size(0), -1))
     return logits, logits_aux
 
-class TabularCell(nn.Module):
-
-  def __init__(self, genotype, out_prev_prev, out_prev, out_curr, reduction, reduction_prev, device):
-    super(TabularCell, self).__init__()
-    self.device = device
-    self.reduction = reduction
-    self.reduction_prev = reduction_prev
-
-    if reduction_prev:
-      self.preprocess = nn.Linear(out_prev_prev, out_prev)
-    else:
-      self.preprocess = Identity()
-    if reduction:
-      self.reduction = nn.Sequential(
-        nn.Linear(out_prev, out_curr),
-        nn.ReLU()
-      )
-    else:
-      self.reduction = Identity()
-    
-    if reduction:
-      op_names, indices = zip(*genotype.reduce)
-    else:
-      op_names, indices = zip(*genotype.normal)
-    self._compile(out_prev, out_curr, op_names, indices)
-
-  def _compile(self, out_prev, out_curr, op_names, indices):
-    assert len(op_names) == len(indices)
-    self._steps = len(op_names) // 2
-    self.postprocess = nn.Linear((self._steps + 2)*out_curr, out_curr)
-
-    self._ops = nn.ModuleList()
-    for name, index in zip(op_names, indices):
-      op = TABOPS[name](out_curr, out_curr)
-      self._ops += [op]
-    self._indices = indices
-
-  def forward(self, s0, s1, drop_prob):
-    s0 = self.preprocess(s0)
-
-    states = [self.reduction(s0), self.reduction(s1)]
-    for i in range(self._steps):
-      h1 = states[self._indices[2*i]]
-      h2 = states[self._indices[2*i+1]]
-      op1 = self._ops[2*i]
-      op2 = self._ops[2*i+1]
-      h1 = torch.dropout(op1(h1), drop_prob, True)
-      h2 = torch.dropout(op2(h2), drop_prob, True)
-      s = h1 + h2
-      states += [s]
-    return self.postprocess(torch.cat(states, dim=1))
-
 class NetworkTabular(nn.Module):
-  def __init__(self, in_dim, num_classes, layers, genotype, device):
+  def __init__(self, in_dims, out_dims, num_classes, genotype, device):
     super(NetworkTabular, self).__init__()
-    self.in_dime = in_dim
-    self._num_classes = num_classes
-    self._layers = layers
-    self.device = device
-    self.drop_path_prob = 0.2
- 
-    dim_prev_prev, dim_prev, dim_curr = in_dim, in_dim, in_dim
-    self.cells = nn.ModuleList()
-    reduction_prev = False
-    for i in range(layers):
-      if i in [layers//3, 2*layers//3]:
-        dim_curr = int(dim_curr * 0.8)
-        reduction = True
-      else:
-        reduction = False
-      cell = TabularCell(genotype, dim_prev_prev, dim_prev, dim_curr, 
-                      reduction=reduction, reduction_prev=reduction_prev, device=device)
-      reduction_prev = reduction
-      self.cells += [cell]
-      dim_prev_prev, dim_prev = dim_prev, dim_curr
+    assert len(in_dims) == len(out_dims)
+    assert len(in_dims) == len(genotype.architecture)
+    self.num_classes = num_classes
+    self.layers = nn.ModuleList()
+    for i in range(0, len(genotype.architecture)):
+      indim = in_dims[i]
+      outdim = out_dims[i]
+      op = genotype.architecture[i]
+      layer = TABOPS[op](indim, outdim)
+      self.layers.append(layer)
 
     if num_classes == 2:
-      self.classifier = nn.Linear(dim_prev, 1)
+      self.linear = nn.Linear(out_dims[-1], 1)
     else:
-      self.classifier = nn.Linear(dim_prev, num_classes)
+      self.linear = nn.Linear(out_dims[-1], num_classes)
 
-  def forward(self, input):
-    s0 = s1 = input
-    for i, cell in enumerate(self.cells):
-      s0, s1 = s1, cell(s0, s1, self.drop_path_prob)
-    logits = self.classifier(s1)
-    if self._num_classes == 2:
-      return torch.sigmoid(torch.squeeze(logits)), None
-    return logits, None
+  def forward(self, x):
+    for op in self.layers:
+      x = op(x)
+    if self.num_classes == 2:
+      return torch.sigmoid(torch.squeeze(self.linear(x))), None
+    else:
+      return self.linear(x), None

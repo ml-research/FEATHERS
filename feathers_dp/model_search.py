@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from operations import *
 from genotypes import PRIMITIVES, TABULAR_PRIMITIVES
-from genotypes import Genotype
+from genotypes import Genotype, TabularGenotype
 from opacus.grad_sample import register_grad_sampler
 from typing import Dict
 from utils import get_params
@@ -29,11 +29,11 @@ class ParallelOp(nn.Module):
 
 class TabularParallelOp(nn.Module):
 
-  def __init__(self, dim) -> None:
+  def __init__(self, indim, outdim) -> None:
     super().__init__()
     self._ops = nn.ModuleList()
     for primitive in TABULAR_PRIMITIVES:
-      op = TABOPS[primitive](dim, dim)
+      op = TABOPS[primitive](indim, outdim)
       self._ops.append(op)
 
   def forward(self, x):
@@ -230,81 +230,49 @@ class TabularCell(nn.Module):
     return self.postprocess(torch.cat(states, dim=1))
 
 class TabularNetwork(nn.Module):
-  def __init__(self, steps, in_dim, num_classes, layers, criterion, device):
-    super(TabularNetwork, self).__init__()
-    self.in_dime = in_dim
-    self._num_classes = num_classes
-    self._layers = layers
-    self._criterion = criterion
+  def __init__(self, in_dims, out_dims, classes, criterion, device):
+    super().__init__()
+    assert len(in_dims) == len(out_dims)
     self.device = device
-    self._steps = steps
- 
-    dim_prev_prev, dim_prev, dim_curr = in_dim, in_dim, in_dim
+    self.classes = classes
+    self._criterion = criterion
     self.cells = nn.ModuleList()
-    reduction_prev = False
-    self._init_mixed_ops()
-    for i in range(layers):
-      if i in [layers//3, 2*layers//3]:
-        dim_curr = int(dim_curr * 0.8)
-        reduction = True
-      else:
-        reduction = False
-      cell = TabularCell(steps, dim_prev_prev, dim_prev, dim_curr, 
-                      reduction=reduction, reduction_prev=reduction_prev,
-                      mixed_ops_normal=self.mixed_ops_normal, mixed_ops_reduce=self.mixed_ops_reduce)
-      reduction_prev = reduction
-      self.cells += [cell]
-      dim_prev_prev, dim_prev = dim_prev, dim_curr
+    self.mops = []
+    for in_dim, out_dim in zip(in_dims, out_dims):
+      mop = MixedOp(TABULAR_PRIMITIVES)
+      op = nn.Sequential(TabularParallelOp(in_dim, out_dim), mop)
+      self.cells.append(op)
+      self.mops.append(mop)
+    
+    if classes == 2:
+      self.linear = nn.Linear(out_dims[-1], 1)
+    else:
+      self.linear = nn.Linear(out_dims[-1], classes)
 
-    self.classifier = nn.Linear(dim_prev, num_classes)
-
-  def forward(self, input):
-    s0 = s1 = input
+  def forward(self, x):
     for i, cell in enumerate(self.cells):
-      s0, s1 = s1, cell(s0, s1)
-    logits = self.classifier(s1)
-    return logits
+      x = cell(x)
+    
+    if self.classes == 2:
+      return torch.sigmoid(torch.squeeze(self.linear(x)))
+    else:
+      return self.linear(x)
+
 
   def _loss(self, input, target):
     logits = self(input)
-    return self._criterion(logits, target)
+    return self._criterion(logits, target) 
 
-  def _init_mixed_ops(self):
-    k = sum(1 for i in range(self._steps) for n in range(2+i))
-    self.mixed_ops_normal = [MixedOp(TABULAR_PRIMITIVES) for _ in range(k)]
-    self.mixed_ops_reduce = [MixedOp(TABULAR_PRIMITIVES) for _ in range(k)]
+  def arch_parameters(self):
+    alphas = [mop.alphas for mop in self.mops]
+    return alphas
 
   def genotype(self):
-
-    def _parse(weights):
-      gene = []
-      n = 2
-      start = 0
-      for i in range(self._steps):
-        end = start + n
-        W = weights[start:end].copy()
-        edges = sorted(range(i + 2), key=lambda x: -max(W[x][k] for k in range(len(W[x])) if k != TABULAR_PRIMITIVES.index('none')))[:2]
-        for j in edges:
-          k_best = None
-          for k in range(len(W[j])):
-            if k != TABULAR_PRIMITIVES.index('none'):
-              if k_best is None or W[j][k] > W[j][k_best]:
-                k_best = k
-          gene.append((TABULAR_PRIMITIVES[k_best], j))
-        start = end
-        n += 1
-      return gene
-
-    alphas_normal = torch.stack([mop.alphas.data for mop in self.mixed_ops_normal])
-    alphas_reduce = torch.stack([mop.alphas.data for mop in self.mixed_ops_reduce])
-    gene_normal = _parse(F.softmax(alphas_normal, dim=-1).data.cpu().numpy())
-    gene_reduce = _parse(F.softmax(alphas_reduce, dim=-1).data.cpu().numpy())
-
-    concat = range(2+self._steps, self._steps+2)
-    genotype = Genotype(
-      normal=gene_normal, normal_concat=concat,
-      reduce=gene_reduce, reduce_concat=concat
-    )
+    arch = []
+    for mop in self.mops:
+      idx = torch.argmax(mop.alphas).item()
+      arch.append(TABULAR_PRIMITIVES[idx])
+    genotype = TabularGenotype(architecture=arch)
     return genotype
 
 @register_grad_sampler(ParallelOp)

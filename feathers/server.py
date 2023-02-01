@@ -47,7 +47,7 @@ def start_server_valid(rounds):
     elif config.DATASET == 'imagenet':
         net = NetworkImageNet(config.OUT_CHANNELS, config.CLASSES, config.CELL_NR, False, GENOTYPE, device=device)
     elif config.DATASET == 'fraud':
-        net = NetworkTabular(config.FRAUD_DETECTION_IN_DIM, config.CLASSES, config.CELL_NR, GENOTYPE, device=device)
+        net = NetworkTabular(config.NET_IN_DIMS, config.NET_OUT_DIMS, config.CLASSES, GENOTYPE, device=device)
 
     # prepare log-directories
     prepare_log_dirs()

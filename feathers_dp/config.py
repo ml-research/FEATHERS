@@ -22,10 +22,12 @@ IN_CHANNELS = 1 # mumber of input-channels (e.g. 3 for rgb-images)
 OUT_CHANNELS = 16 # number of output-channels
 NODE_NR = 7 # number of nodes per cell
 FRAUD_DETECTION_IN_DIM = 7
+NET_IN_DIMS = [7, 5, 3]
+NET_OUT_DIMS = [5, 3, 2]
 
-PORT = '8050'
-GPUS = [5, 7] # GPUs to use
-SERVER_GPU = 5
+PORT = '8054'
+GPUS = [7] # GPUs to use
+SERVER_GPU = 7
 
 DATA_SKEW = 0 # skew of labels. 0 = no skew, 1 only some clients hold some labels
 USE_WEIGHTED_SAMPLER = True

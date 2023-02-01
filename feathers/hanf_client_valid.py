@@ -55,11 +55,6 @@ def train(train_queue, model, criterion, optimizer, device):
     input = input.to(device)
     target = target.to(device)
 
-    if step % 10 == 0:
-        pos = len(target[target == 1])
-        neg = len(target[target == 0])
-        print(f"FRAC = {pos / (pos + neg)}")
-
 
     if config.CLASSES == 2:
         target = target.float()
@@ -107,7 +102,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             elif config.DATASET == 'imagenet':
                 self.model = NetworkImageNet(out_channels, classes, cell_nr, False, genotype=GENOTYPE, device=device)
             elif config.DATASET == 'fraud':
-                self.model = NetworkTabular(config.FRAUD_DETECTION_IN_DIM, classes, cell_nr, genotype=GENOTYPE, device=device)
+                self.model = NetworkTabular(config.NET_IN_DIMS, config.NET_OUT_DIMS, config.CLASSES, GENOTYPE, device=device)
             self.model = self.model.to(device)
             self.optimizer = torch.optim.SGD(self.model.parameters(), 0.01, 0.9, 3e-4)
             sampler = self._get_sampler(train_data) if config.USE_WEIGHTED_SAMPLER else None

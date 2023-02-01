@@ -26,12 +26,12 @@ DEVICE = torch.device("cuda:{}".format(str(config.SERVER_GPU)) if torch.cuda.is_
 
 def _test(net, testloader, writer, round, stage='search'):
     """Validate the network on the entire test set."""
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = torch.nn.BCELoss() if config.CLASSES == 2 else torch.nn.CrossEntropyLoss()
     correct, total, loss = 0, 0, 0.0
     f1_micro, f1_macro = 0, 0
     net.eval()
     with torch.no_grad():
-        for feats, labels in testloader:
+        for i, (feats, labels) in enumerate(testloader):
             #feats = feats.type(torch.FloatTensor)
             #labels = labels.type(torch.LongTensor)
             feats, labels = feats.to(DEVICE), labels.to(DEVICE)
@@ -40,12 +40,19 @@ def _test(net, testloader, writer, round, stage='search'):
             else:
                 preds, preds_aux = net(feats)
             writer.add_histogram('logits', preds, round)
-            loss += criterion(preds, labels).item()
-            _, predicted = torch.max(preds.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+            if config.CLASSES > 2:
+                loss += criterion(preds, labels).item()
+                _, predicted = torch.max(preds.data, 1)
+                correct += (predicted == labels).sum().item()
+            else:
+                loss += criterion(preds, labels.float()).item()
+                predicted = preds.data
+                predicted[predicted >= 0.5] = 1
+                predicted[predicted < 0.5] = 0
+                correct += (predicted == labels).sum().item()
             f1_micro += f1_score(labels.detach().cpu().numpy(), predicted.detach().cpu().numpy(), average='micro')
             f1_macro += f1_score(labels.detach().cpu().numpy(), predicted.detach().cpu().numpy(), average='macro')
+            total += labels.size(0)
     loss /= len(testloader.dataset)
     f1_micro /= len(testloader)
     f1_macro /= len(testloader)
@@ -243,7 +250,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         for idx in np.unique(np_gain_hist[:, 0]):
             same_idx = np.argwhere(np_gain_hist[:, 0] == idx).squeeze()
             avg_gain = np.average(np_gain_hist[same_idx, 1])
-            rewards[idx] = avg_gain
+            rewards[int(idx)] = avg_gain
         sampled_inds = [i for i, _ in self.gain_history]
         mask = np.zeros(len(self.reward_estimates))
         mask[sampled_inds] = 1

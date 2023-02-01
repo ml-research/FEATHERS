@@ -1,6 +1,7 @@
 from collections import namedtuple
 
 Genotype = namedtuple('Genotype', 'normal normal_concat reduce reduce_concat')
+TabularGenotype = namedtuple('TabularGenotype', 'architecture')
 
 PRIMITIVES = [
     'none',
@@ -14,18 +15,14 @@ PRIMITIVES = [
 ]
 
 TABULAR_PRIMITIVES = [
-  'none',
   'relu_ln_1',
   'sigmoid_ln_1',
   'tanh_ln_1',
   'relu_ln_2_reddim',
-  'relu_ln_2_expdim',
   'sigmoid_2_reddim',
-  'sigmoid_2_expdim',
   'tanh_ln_2_reddim',
-  'tahn_ln_2_expdim',
-  'skip_connect'
 ]
+
 
 NASNet = Genotype(
   normal = [

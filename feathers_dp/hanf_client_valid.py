@@ -25,7 +25,7 @@ EPOCHS = 1
 
 def _test(net, testloader, device):
     """Validate the network on the entire test set."""
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = torch.nn.BCELoss() if config.CLASSES == 2 else torch.nn.CrossEntropyLoss()
     correct, total, loss = 0, 0, 0.0
     net.eval()
     with torch.no_grad():
@@ -34,8 +34,16 @@ def _test(net, testloader, device):
             #labels = labels.type(torch.LongTensor)
             feats, labels = feats.to(device), labels.to(device)
             preds, _ = net(feats)
-            loss += criterion(preds, labels).item()
-            _, predicted = torch.max(preds.data, 1)
+            if config.CLASSES > 2:
+                loss += criterion(preds, labels).item()
+                _, predicted = torch.max(preds.data, 1)
+                correct += (predicted == labels).sum().item()
+            else:
+                loss += criterion(preds, labels.float()).item()
+                predicted = preds.data
+                predicted[predicted >= 0.5] = 1
+                predicted[predicted < 0.5] = 0
+                correct += (predicted == labels).sum().item()
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
     accuracy = correct / total
@@ -48,6 +56,10 @@ def train(train_queue, model, criterion, optimizer, device):
 
     input = input.to(device)
     target = target.to(device)
+
+
+    if config.CLASSES == 2:
+        target = target.float()
 
     optimizer.zero_grad()
     logits, _ = model(input)
@@ -85,7 +97,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             self.epoch = 0
             self.hyperparameters = Hyperparameters(config.HYPERPARAM_CONFIG_NR)
             self.hyperparameters.read_from_csv(config.HYPERPARAM_FILE)
-            self.criterion = torch.nn.CrossEntropyLoss()
+            self.criterion = torch.nn.BCELoss() if config.CLASSES == 2 else torch.nn.CrossEntropyLoss()
             self.criterion = self.criterion.to(device)
             if config.DATASET == 'cifar10' or config.DATASET == 'fmnist':
                 self.model = NetworkCIFAR(out_channels, classes, cell_nr, False, genotype=GENOTYPE, device=device, in_channels=input_channels)
