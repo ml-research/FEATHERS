@@ -68,7 +68,10 @@ def train(train_queue, model, criterion, optimizer, device):
     optimizer.step()
 
     if step % 50 == 0:
-        print("Step %03d" % step)
+        _, predicted = torch.max(logits.data, 1)
+        correct = (predicted == target).sum().item()
+        acc = correct / len(target)
+        print(f'Step Acc Loss {step} {acc} {loss.item()}')
   
   return model
 
@@ -84,7 +87,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
     train_data, test_data = data_loader.load_client_data(client_id)
     date = dt.strftime(dt.now(), '%Y:%m:%d:%H:%M:%S')
     writer = SummaryWriter("./runs/Client_val_{}".format(date))
-    rtpt = RTPT('JS', 'HANF_Client', EPOCHS)
+    rtpt = RTPT('JS', 'FEATHERS_Client', EPOCHS)
     rtpt.start()
 
     # Flower client

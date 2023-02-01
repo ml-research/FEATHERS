@@ -94,7 +94,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         self.current_round = 0
         tb_log_prefix = 'Server_{}' if stage == 'search' else 'Server_valid_{}'
         self.writer = SummaryWriter(log_dir + tb_log_prefix.format(self.date))
-        self.rtpt = RTPT('JS', 'HANF_Server', config.ROUNDS)
+        self.rtpt = RTPT('JS', 'FEATHERS_Server', config.ROUNDS)
         self.rtpt.start()
         self.reward_estimates = np.zeros(len(self.hyperparams))
         self.alpha = alpha
@@ -192,7 +192,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             normed_rewards = self.reward_estimates
         dist = softmax(normed_rewards)
         config_inds = np.arange(0, len(self.hyperparams))
-        self.exploration_steps = int(np.round(self.gamma * entropy(dist), 0))
+        self.exploration_steps = 1 #int(np.round(self.gamma * entropy(dist), 0))
         print('Exploring for {} rounds'.format(self.exploration_steps))
         if self.exploration_mode == 'greedy':
             self.current_exploration = np.random.choice(config_inds, self.exploration_steps, p=dist)

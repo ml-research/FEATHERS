@@ -80,9 +80,24 @@ class ImageNet(Loader):
 
     def __init__(self, n_clients, indspath, skew=0) -> None:
         super().__init__(n_clients, indspath, skew)
-        transform = torchvision.transforms.Compose([torchvision.transforms.ToTensor(), torchvision.transforms.Normalize((0,), (1,))])
-        self.train_data = torchvision.datasets.ImageFolder('../../../datasets/tiny-imagenet/train', transform=transform)
-        self.val_data = torchvision.datasets.ImageFolder('../../../datasets/tiny-imagenet/val', transform=transform)
+        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        transform_train = torchvision.transforms.Compose([transforms.RandomResizedCrop(224),
+            transforms.RandomHorizontalFlip(),
+            transforms.ColorJitter(
+                brightness=0.4,
+                contrast=0.4,
+                saturation=0.4,
+                hue=0.2),
+            transforms.ToTensor(),
+            normalize,])
+        transform_valid = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            normalize,
+        ])
+        self.train_data = torchvision.datasets.ImageFolder('../../../datasets/tiny-imagenet/train', transform=transform_train)
+        self.val_data = torchvision.datasets.ImageFolder('../../../datasets/tiny-imagenet/val', transform=transform_valid)
 
 class FraudDetection(Loader):
 
