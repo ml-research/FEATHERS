@@ -85,7 +85,7 @@ class FedexStrategy(fl.server.strategy.FedAvg):
         self.test_loader = DataLoader(self.test_data, batch_size=config.BATCH_SIZE, pin_memory=True, num_workers=2)
         self.current_round = 1
         self.writer = SummaryWriter(log_dir)
-        self.rtpt = RTPT('JS', 'Fedex_Server', config.ROUNDS)
+        self.rtpt = RTPT('JS', 'FedEx_Server', config.ROUNDS)
         self.rtpt.start()
         self.distribution_history = []
         self.gain_history = [] # initialize with [0] to avoid nan-values in discounted mean

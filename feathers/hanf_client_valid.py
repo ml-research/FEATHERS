@@ -109,8 +109,11 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             self.model = self.model.to(device)
             self.optimizer = torch.optim.SGD(self.model.parameters(), 0.01, 0.9, 3e-4)
             sampler = self._get_sampler(train_data) if config.USE_WEIGHTED_SAMPLER else None
-            self.train_loader = DataLoader(train_data, config.BATCH_SIZE, pin_memory=True, num_workers=2, sampler=sampler)
-            self.val_loader = DataLoader(test_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
+            if sampler is not None:
+                self.train_loader = DataLoader(train_data, config.BATCH_SIZE, pin_memory=True, num_workers=2, sampler=sampler)
+            else:
+                self.train_loader = DataLoader(train_data, config.BATCH_SIZE, pin_memory=True, num_workers=2, shuffle=True)
+            self.val_loader = DataLoader(test_data, config.BATCH_SIZE, pin_memory=True, num_workers=2, shuffle=True)
             self.hyperparam_config = None
 
         def get_parameters(self):

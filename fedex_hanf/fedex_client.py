@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from utils import get_dataset_loder
-from fedex_model import FMNISTCNN, CIFARCNN, NetworkCIFAR
+from fedex_model import FMNISTCNN, CIFARCNN, NetworkCIFAR, NetworkImageNet
 from rtpt import RTPT
 import numpy as np
 from tensorboardX import SummaryWriter
@@ -67,14 +67,17 @@ def main(device, client_id):
     #    net = CIFARCNN(config.IN_CHANNELS, config.OUT_CHANNELS, config.CLASSES)
     #elif config.DATASET == 'fmnist':
     #    net = FMNISTCNN()
-    net = NetworkCIFAR(config.OUT_CHANNELS, config.CLASSES, config.CELLS, False, GENOTYPE, device, config.IN_CHANNELS)
-    net.to(device)
+    if config.DATASET == 'cifar10' or config.DATASET == 'fmnist':
+        net = NetworkCIFAR(config.OUT_CHANNELS, config.CLASSES, config.CELLS, False, GENOTYPE, device, config.IN_CHANNELS)
+    else:
+        net = NetworkImageNet(config.OUT_CHANNELS, config.CLASSES, config.CELLS, False, GENOTYPE, device=device)
+    net = net.to(device)
 
     # Load data
     dataset_loader = get_dataset_loder(config.DATASET, config.CLIENT_NR, config.DATASET_INDS_FILE, config.DATA_SKEW)
     train_data, test_data = dataset_loader.load_client_data(client_id)
     train_data, test_data = DataLoader(train_data, config.BATCH_SIZE, False), DataLoader(test_data, config.BATCH_SIZE, False)
-    rtpt = RTPT('JS', 'HANF_Client', config.ROUNDS)
+    rtpt = RTPT('JS', 'FedEx_Client', config.ROUNDS)
     rtpt.start()
 
     # Flower client

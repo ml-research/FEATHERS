@@ -10,9 +10,9 @@ LOG_DIR = './runs/'
 
 # server parameters
 DATASET = 'fraud' # dataset to use. Alternatives: cifar10
-CLIENT_NR = 5
-MIN_TRAIN_CLIENTS = 5 # min. number of clients used during fit
-MIN_VAL_CLIENTS = 5 # min. number of clients used during evaluation
+CLIENT_NR = 100
+MIN_TRAIN_CLIENTS = 100 # min. number of clients used during fit
+MIN_VAL_CLIENTS = 100 # min. number of clients used during evaluation
 REINIT = False # reinitailize model if no improvement was made
 
 # model initilization parameters
@@ -25,8 +25,8 @@ FRAUD_DETECTION_IN_DIM = 7
 NET_IN_DIMS = [7, 5, 3]
 NET_OUT_DIMS = [5, 3, 2]
 
-PORT = '8054'
-GPUS = [7] # GPUs to use
+PORT = '8019'
+GPUS = [3, 4, 5, 6, 7] # GPUs to use
 SERVER_GPU = 7
 
 DATA_SKEW = 0 # skew of labels. 0 = no skew, 1 only some clients hold some labels
@@ -34,7 +34,7 @@ USE_WEIGHTED_SAMPLER = True
 
 # Differential Privacy
 MAX_GRAD_NORM = 1.
-DP_SIGMA_REWARD = 1e-3
+DP_SIGMA_REWARD = 1e-4
 
 # validation stage
 DROP_PATH_PROB = 0.2 # probability of dropping a path in cell, similar to dropout

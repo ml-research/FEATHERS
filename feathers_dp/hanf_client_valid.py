@@ -104,7 +104,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             elif config.DATASET == 'imagenet':
                 self.model = NetworkImageNet(out_channels, classes, cell_nr, False, genotype=GENOTYPE, device=device)
             elif config.DATASET == 'fraud':
-                self.model = NetworkTabular(config.FRAUD_DETECTION_IN_DIM, config.CLASSES, config.CELL_NR, GENOTYPE, device=device)
+                self.model = NetworkTabular(config.NET_IN_DIMS, config.NET_OUT_DIMS, config.CLASSES, GENOTYPE, device=device)
             self.model = self.model.to(device)
             self.optimizer = torch.optim.SGD(self.model.parameters(), 0.01, momentum=0.99, weight_decay=1e-3)
             self.train_loader = DataLoader(train_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
