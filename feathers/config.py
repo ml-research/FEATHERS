@@ -10,10 +10,10 @@ NAS_STEPS = 30
 LOG_DIR = './runs/'
 
 # server parameters
-DATASET = 'cifar10' # dataset to use. Alternatives: cifar10, fmnist, imagenet, fraud
-CLIENT_NR = 1
-MIN_TRAIN_CLIENTS = 1 # min. number of clients used during fit
-MIN_VAL_CLIENTS = 1 # min. number of clients used during evaluation
+DATASET = 'imagenet' # dataset to use. Alternatives: cifar10, fmnist, imagenet, fraud
+CLIENT_NR = 5
+MIN_TRAIN_CLIENTS = 5 # min. number of clients used during fit
+MIN_VAL_CLIENTS = 5 # min. number of clients used during evaluation
 REINIT = False # reinitailize model if no improvement was made
 
 # model initilization parameters
