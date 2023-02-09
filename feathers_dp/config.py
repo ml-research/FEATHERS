@@ -1,6 +1,6 @@
 # hyperparameter configuration parameters
-ROUNDS = 500 # nr. of communication rounds
-ALPHA = 0.5
+ROUNDS = 1500 # nr. of communication rounds
+ALPHA = 0.3
 GAMMA = 6
 HYPERPARAM_CONFIG_NR = 120 # size of hyperparameter search space
 BATCH_SIZE = 96
@@ -9,10 +9,10 @@ BATCH_SIZE = 96
 LOG_DIR = './runs/'
 
 # server parameters
-DATASET = 'fraud' # dataset to use. Alternatives: cifar10
-CLIENT_NR = 100
-MIN_TRAIN_CLIENTS = 100 # min. number of clients used during fit
-MIN_VAL_CLIENTS = 100 # min. number of clients used during evaluation
+DATASET = 'fraud' # dataset to use. Alternatives: cifar10, fmnist, imagenet, fraud
+CLIENT_NR = 10
+MIN_TRAIN_CLIENTS = 10 # min. number of clients used during fit
+MIN_VAL_CLIENTS = 10 # min. number of clients used during evaluation
 REINIT = False # reinitailize model if no improvement was made
 
 # model initilization parameters
@@ -25,9 +25,9 @@ FRAUD_DETECTION_IN_DIM = 7
 NET_IN_DIMS = [7, 5, 3]
 NET_OUT_DIMS = [5, 3, 2]
 
-PORT = '8019'
-GPUS = [3, 4, 5, 6, 7] # GPUs to use
-SERVER_GPU = 7
+PORT = '8098'
+GPUS = [6] # GPUs to use
+SERVER_GPU = 6
 
 DATA_SKEW = 0 # skew of labels. 0 = no skew, 1 only some clients hold some labels
 USE_WEIGHTED_SAMPLER = True
@@ -35,6 +35,7 @@ USE_WEIGHTED_SAMPLER = True
 # Differential Privacy
 MAX_GRAD_NORM = 1.
 DP_SIGMA_REWARD = 1e-4
+NOISE_MP = 1.5
 
 # validation stage
 DROP_PATH_PROB = 0.2 # probability of dropping a path in cell, similar to dropout

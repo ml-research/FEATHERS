@@ -8,19 +8,19 @@ BATCH_SIZE = 96
 LOG_DIR = './runs/'
 
 # server parameters
-DATASET = 'fmnist' # dataset to use. Alternatives: cifar10
+DATASET = 'cifar10' # dataset to use. Alternatives: cifar10
 CLIENT_NR = 100
 MIN_TRAIN_CLIENTS = 100 # min. number of clients used during fit
 MIN_VAL_CLIENTS = 100 # min. number of clients used during evaluation
 
 # model initilization parameters
 CLASSES = 10 # number of output-classes
-IN_CHANNELS = 1 # mumber of input-channels (e.g. 3 for rgb-images)
+IN_CHANNELS = 3 # mumber of input-channels (e.g. 3 for rgb-images)
 OUT_CHANNELS = 36 # number of output-channels
 CELLS = 20
 
 PORT = '8005'
-GPUS = [0, 1, 3, 4, 6, 7] # GPUs to use
+GPUS = [0, 1, 2, 3, 4, 5, 6, 7] # GPUs to use
 SERVER_GPU = 7
 
 DATA_SKEW = 0.0 # skew of labels. 0 = no skew, 1 only some clients hold some labels

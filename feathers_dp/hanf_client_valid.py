@@ -111,7 +111,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             self.val_loader = DataLoader(test_data, config.BATCH_SIZE, pin_memory=True, num_workers=2)
             pe = PrivacyEngine()
             self.model, self.optimizer, self.train_loader = pe.make_private(module=self.model, optimizer=self.optimizer, 
-                                                                    data_loader=self.train_loader, noise_multiplier=0.5, max_grad_norm=config.MAX_GRAD_NORM)
+                                                                    data_loader=self.train_loader, noise_multiplier=config.NOISE_MP, max_grad_norm=config.MAX_GRAD_NORM)
             self.hyperparam_config = None
 
         def get_parameters(self):

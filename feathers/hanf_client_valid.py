@@ -68,10 +68,7 @@ def train(train_queue, model, criterion, optimizer, device):
     optimizer.step()
 
     if step % 50 == 0:
-        _, predicted = torch.max(logits.data, 1)
-        correct = (predicted == target).sum().item()
-        acc = correct / len(target)
-        print(f'Step Acc Loss {step} {acc} {loss.item()}')
+        print(f'Step Acc Loss {step}')
   
   return model
 
