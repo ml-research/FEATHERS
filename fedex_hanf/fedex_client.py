@@ -18,7 +18,7 @@ from hyperparameters import Hyperparameters
 from genotype import GENOTYPE
 
 warnings.filterwarnings("ignore", category=UserWarning)
-EPOCHS = 1
+EPOCHS = 5
 
 def train(net, trainloader, writer, epoch, optimizer, device):
     """Train the network on the training set."""
@@ -28,13 +28,13 @@ def train(net, trainloader, writer, epoch, optimizer, device):
         images, labels = images.to(device), labels.to(device)
         optimizer.zero_grad()
         logits, _ = net(images)
-        writer.add_histogram('logits', logits, i*epoch)
+        #writer.add_histogram('logits', logits, i*epoch)
         loss = criterion(logits, labels)
         loss.backward()
         nn.utils.clip_grad_norm_(net.parameters(), 5.)
         running_loss += loss.item()
         optimizer.step()
-    writer.add_scalar('Training_Loss', running_loss, epoch)
+    # writer.add_scalar('Training_Loss', running_loss, epoch)
 
 def _test(net, testloader, device):
     """Validate the network on the entire test set."""
@@ -76,7 +76,7 @@ def main(device, client_id):
     # Load data
     dataset_loader = get_dataset_loder(config.DATASET, config.CLIENT_NR, config.DATASET_INDS_FILE, config.DATA_SKEW)
     train_data, test_data = dataset_loader.load_client_data(client_id)
-    train_data, test_data = DataLoader(train_data, config.BATCH_SIZE, False), DataLoader(test_data, config.BATCH_SIZE, False)
+    train_data, test_data = DataLoader(train_data, config.BATCH_SIZE, False, num_workers=2), DataLoader(test_data, config.BATCH_SIZE, False, num_workers=2)
     rtpt = RTPT('JS', 'FedEx_Client', config.ROUNDS)
     rtpt.start()
 
@@ -122,9 +122,12 @@ def main(device, client_id):
 
         def fit(self, parameters, config):
             self.set_parameters_train(parameters, config)
+            net.drop_path_prob = 0
             before_loss, _ = _test(net, test_data, device)
-            #net.drop_path_prob = self.hyperparam_config['dropout']
-            train(net, train_data, self.writer, self.epoch, self.optim, device)
+            net.drop_path_prob = self.hyperparam_config['dropout']
+            for _ in range(EPOCHS):
+                train(net, train_data, self.writer, self.epoch, self.optim, device)
+            net.drop_path_prob = 0
             after_loss, _ = _test(net, test_data, device)
             model_params = self.get_parameters()
             rtpt.step()

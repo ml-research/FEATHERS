@@ -90,7 +90,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         dataset_iterator = get_dataset_loder(config.DATASET, config.CLIENT_NR, config.DATASET_INDS_FILE, config.DATA_SKEW)
         dataset_iterator.partition() # distribute data
         self.test_data = dataset_iterator.load_server_data()
-        self.test_loader = DataLoader(self.test_data, batch_size=config.BATCH_SIZE, pin_memory=True, num_workers=2)
+        self.test_loader = DataLoader(self.test_data, batch_size=config.BATCH_SIZE, pin_memory=True, num_workers=0)
         self.current_round = 0
         tb_log_prefix = 'Server_{}' if stage == 'search' else 'Server_valid_{}'
         self.writer = SummaryWriter(log_dir + tb_log_prefix.format(self.date))
@@ -180,8 +180,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         serialized_idx = ndarray_to_proto(np.array([self.current_config_idx]))
         aggregated_weights.tensors.append(serialized_idx.ndarray)
 
-        log_hyper_config(self.hyperparams[self.current_config_idx], rnd, self.writer)
-
+        # log_hyper_config(self.hyperparams[self.current_config_idx], rnd, self.writer)
         return aggregated_weights, {}
 
     def _sample_hyperparams(self):
@@ -192,7 +191,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
             normed_rewards = self.reward_estimates
         dist = softmax(normed_rewards)
         config_inds = np.arange(0, len(self.hyperparams))
-        self.exploration_steps = 1 #int(np.round(self.gamma * entropy(dist), 0))
+        self.exploration_steps = int(np.round(self.gamma * entropy(dist), 0))
         print('Exploring for {} rounds'.format(self.exploration_steps))
         if self.exploration_mode == 'greedy':
             self.current_exploration = np.random.choice(config_inds, self.exploration_steps, p=dist)
@@ -308,7 +307,7 @@ class HANFStrategy(fl.server.strategy.FedAvg):
         log_model_weights(self.net, self.current_round, self.writer)
 
         # persist model
-        torch.save(self.net, './models/net_round_{}'.format(self.current_round))
+        # torch.save(self.net, './models/net_round_{}'.format(self.current_round))
 
         # log current genotype if we are in architecture search phase
         if self.stage == 'search':

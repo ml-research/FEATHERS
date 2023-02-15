@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, WeightedRandomSampler
 from torch.autograd import Variable
 import numpy as np
-from utils import get_dataset_loder
+from utils import get_dataset_loder, CrossEntropyLabelSmooth
 from rtpt import RTPT
 import config
 from hyperparameters import Hyperparameters
@@ -18,7 +18,7 @@ from model import NetworkCIFAR, NetworkImageNet, NetworkTabular
 from genotypes import GENOTYPE
 
 warnings.filterwarnings("ignore", category=UserWarning)
-EPOCHS = 1
+EPOCHS = 5
 
 
 def _test(net, testloader, device):
@@ -68,7 +68,7 @@ def train(train_queue, model, criterion, optimizer, device):
     optimizer.step()
 
     if step % 50 == 0:
-        print(f'Step Acc Loss {step}')
+        print(f'Step Acc Loss {step} {loss.item()}')
   
   return model
 
@@ -97,6 +97,10 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             self.hyperparameters.read_from_csv(config.HYPERPARAM_FILE)
             self.criterion = torch.nn.BCELoss() if config.CLASSES == 2 else torch.nn.CrossEntropyLoss()
             self.criterion = self.criterion.to(device)
+            if config.DATASET == 'imagenet':
+                self.criterion_train = CrossEntropyLabelSmooth(config.CLASSES, 0.1).to(device)
+            else:
+                self.criterion_train = self.criterion
             if config.DATASET == 'cifar10' or config.DATASET == 'fmnist':
                 self.model = NetworkCIFAR(out_channels, classes, cell_nr, False, genotype=GENOTYPE, device=device, in_channels=input_channels)
             elif config.DATASET == 'imagenet':
@@ -104,7 +108,7 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             elif config.DATASET == 'fraud':
                 self.model = NetworkTabular(config.NET_IN_DIMS, config.NET_OUT_DIMS, config.CLASSES, GENOTYPE, device=device)
             self.model = self.model.to(device)
-            self.optimizer = torch.optim.SGD(self.model.parameters(), 0.01, 0.9, 3e-4)
+            self.optimizer = torch.optim.SGD(self.model.parameters(), 0.1, 0.9, 3e-5)
             sampler = self._get_sampler(train_data) if config.USE_WEIGHTED_SAMPLER else None
             if sampler is not None:
                 self.train_loader = DataLoader(train_data, config.BATCH_SIZE, pin_memory=True, num_workers=2, sampler=sampler)
@@ -136,21 +140,20 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
 
         def fit(self, parameters, cfg):
             self.set_parameters_train(parameters, cfg)
+            # test without dropout
+            self.model.drop_path_prob = 0
             before_loss, _ = _test(self.model, self.val_loader, device)
+            self.model.drop_path_prob = self.hyperparam_config['dropout']
             for e in range(EPOCHS):
                 rtpt.step()
                 self.epoch += 1
-                self.model.drop_path_prob = self.hyperparam_config['dropout']
-                self.model = train(self.train_loader, self.model, self.criterion, self.optimizer, device)
+                self.model = train(self.train_loader, self.model, self.criterion_train, self.optimizer, device)
+            self.model.drop_path_prob = 0
             after_loss, _ = _test(self.model, self.val_loader, device)
             model_params = self.get_parameters()
             return model_params, len(train_data), {'hidx': int(self.hidx), 'before': float(before_loss), 'after': float(after_loss)}
 
         def evaluate(self, parameters, config):
-            if self.hyperparam_config is not None:
-                self.model.drop_path_prob = self.hyperparam_config['dropout']
-            else:
-                self.model.drop_path_prob = 0.2 # just to ensure that in initial evaluation there's a value set
             self.set_parameters_evaluate(parameters)
             loss, accuracy = _test(self.model, self.val_loader, device)
             return float(loss), len(test_data), {"accuracy": float(accuracy)}

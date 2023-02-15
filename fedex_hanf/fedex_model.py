@@ -276,3 +276,16 @@ class NetworkImageNet(nn.Module):
       self.auxiliary_head = AuxiliaryHeadImageNet(C_to_auxiliary, num_classes)
     self.global_pooling = nn.AvgPool2d(7)
     self.classifier = nn.Linear(C_prev, num_classes)
+
+  def forward(self, input):
+    logits_aux = None
+    s0 = self.stem0(input)
+    s1 = self.stem1(s0)
+    for i, cell in enumerate(self.cells):
+      s0, s1 = s1, cell(s0, s1, self.drop_path_prob)
+      if i == 2 * self._layers // 3:
+        if self._auxiliary and self.training:
+          logits_aux = self.auxiliary_head(s1)
+    out = self.global_pooling(s1)
+    logits = self.classifier(out.view(out.size(0), -1))
+    return logits, logits_aux

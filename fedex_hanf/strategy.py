@@ -82,7 +82,7 @@ class FedexStrategy(fl.server.strategy.FedAvg):
         data_loader = get_dataset_loder(config.DATASET, config.CLIENT_NR, config.DATASET_INDS_FILE, config.DATA_SKEW)
         data_loader.partition()
         self.test_data = data_loader.load_server_data()
-        self.test_loader = DataLoader(self.test_data, batch_size=config.BATCH_SIZE, pin_memory=True, num_workers=2)
+        self.test_loader = DataLoader(self.test_data, batch_size=config.BATCH_SIZE, pin_memory=True, num_workers=0)
         self.current_round = 1
         self.writer = SummaryWriter(log_dir)
         self.rtpt = RTPT('JS', 'Fedex_Server', config.ROUNDS)
