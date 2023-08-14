@@ -3,8 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from operations import *
 from genotypes import PRIMITIVES, TABULAR_PRIMITIVES
-from genotypes import Genotype, TabularGenotype
-
+from genotypes import Genotype, TabularGenotype, drop_path
 
 class MixedOp(nn.Module):
 
@@ -43,14 +42,17 @@ class Cell(nn.Module):
         op = MixedOp(C, stride)
         self._ops.append(op)
 
-  def forward(self, s0, s1, weights):
+  def forward(self, s0, s1, weights, drop_prob=0.0):
     s0 = self.preprocess0(s0)
     s1 = self.preprocess1(s1)
 
     states = [s0, s1]
     offset = 0
     for i in range(self._steps):
-      s = sum(self._ops[offset+j](h, weights[offset+j]) for j, h in enumerate(states))
+      if drop_prob > 0. and self.training:
+        s = sum(drop_path(self._ops[offset+j](h, weights[offset+j]), drop_prob) for j, h in enumerate(states))
+      else:
+        s = sum(self._ops[offset+j](h, weights[offset+j]) for j, h in enumerate(states))
       offset += len(states)
       states.append(s)
 
@@ -59,7 +61,8 @@ class Cell(nn.Module):
 
 class Network(nn.Module):
 
-  def __init__(self, C, num_classes, layers, criterion, device, in_channels=3, steps=4, multiplier=4, stem_multiplier=3):
+  def __init__(self, C, num_classes, layers, criterion, device, in_channels=3, 
+              steps=4, multiplier=4, stem_multiplier=3, drop_path_prob=0.0):
     super(Network, self).__init__()
     self._C = C
     self._num_classes = num_classes
@@ -68,6 +71,7 @@ class Network(nn.Module):
     self._steps = steps
     self._multiplier = multiplier
     self.device = device
+    self.drop_path_prob = drop_path_prob
 
     C_curr = stem_multiplier*C
     self.stem = nn.Sequential(
@@ -107,7 +111,7 @@ class Network(nn.Module):
         weights = F.softmax(self.alphas_reduce, dim=-1)
       else:
         weights = F.softmax(self.alphas_normal, dim=-1)
-      s0, s1 = s1, cell(s0, s1, weights)
+      s0, s1 = s1, cell(s0, s1, weights, self.drop_path_prob)
     out = self.global_pooling(s1)
     logits = self.classifier(out.view(out.size(0),-1))
     return logits

@@ -17,6 +17,7 @@ from datetime import datetime as dt
 import argparse
 from model_search import Network, TabularNetwork
 from architect import Architect
+from copy import deepcopy
 
 warnings.filterwarnings("ignore", category=UserWarning)
 EPOCHS = 1
@@ -49,7 +50,6 @@ def _test(net, testloader, device):
     return loss, accuracy
 
 def train(train_queue, valid_queue, model, architect, criterion, optimizer, lr, device):
-
   for step, (input, target) in enumerate(train_queue):
     model.train()
 
@@ -108,7 +108,8 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
             if config.DATASET == 'fraud':
                 self.model = TabularNetwork(config.NET_IN_DIMS, config.NET_OUT_DIMS, config.CLASSES, self.criterion, device)
             else:
-                self.model = Network(out_channels, classes, cell_nr, self.criterion, device, in_channels=input_channels, steps=config.NODE_NR)
+                self.model = Network(out_channels, classes, cell_nr, self.criterion, device, 
+                                     in_channels=input_channels, steps=config.NODE_NR, drop_path_prob=config.DROP_PATH_PROB)
             self.model = self.model.to(device)
             self.optimizer = torch.optim.SGD(self.model.parameters(), 0.01, 0.9, 3e-4)
             sampler = self._get_sampler(train_data) if config.USE_WEIGHTED_SAMPLER else None
@@ -140,12 +141,26 @@ def main(dataset, num_clients, device, client_id, classes=10, cell_nr=4, input_c
         def fit(self, parameters, config):
             self.set_parameters_train(parameters, config)
             before_loss, _ = _test(self.model, self.val_loader, device)
+            if config.ES:
+                model_copy = deepcopy(self.model).cpu()
             for e in range(EPOCHS):
                 rtpt.step()
                 self.epoch += 1
+                if config.DROP_PATH_PROB != 0:
+                    self.model.drop_path_prob = config.DROP_PATH_PROB * e / ((EPOCHS * config.ROUNDS) - 1)
                 self.model = train(self.train_loader, self.val_loader, self.model,
                                                  self.architect, self.criterion, self.optimizer, 
                                                  self.hyperparam_config['learning_rate'], device)
+            if config.ES:
+                _data_loader = deepcopy(self.train_loader)
+                x, y = next(iter(_data_loader))
+                x, y = x.to(device), y.to(device)
+                _ = self.architect.compute_Hw(x, y)
+                ev = max(self.architect.compute_eigenvalues())
+                if ev >= config.EV_MAX:
+                    # roll back model
+                    self.model = model_copy.to(device)
+
             after_loss, _ = _test(self.model, self.val_loader, device)
             model_params = self.get_parameters()
             return model_params, len(train_data), {'hidx': int(self.hidx), 'before': float(before_loss), 'after': float(after_loss)}

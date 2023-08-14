@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import torch.nn as nn
 from torch.autograd import Variable
-
+from numpy.linalg import eigvals
 
 def _concat(xs):
   return torch.cat([x.view(-1) for x in xs])
@@ -99,3 +99,60 @@ class Architect(object):
 
     self.network_momentum = hyperparams['momentum']
     self.network_weight_decay = hyperparams['weight_decay']
+
+  def compute_Hw(self, input_valid, target_valid):
+      self.zero_grads(self.model.parameters())
+      self.zero_grads(self.model.arch_parameters())
+
+      loss = self.model._loss(input_valid, target_valid)
+      self.hessian = self._hessian(loss, self.model.arch_parameters())
+      return self.hessian
+  
+  def compute_eigenvalues(self):
+      #hessian = self.compute_Hw(input, target)
+      if self.hessian is None:
+          raise ValueError
+      return eigvals(self.hessian.cpu().data.numpy())
+  
+  def zero_grads(self, parameters):
+      for p in parameters:
+          if p.grad is not None:
+              p.grad.detach_()
+              p.grad.zero_()
+              #if p.grad.volatile:
+              #    p.grad.data.zero_()
+              #else:
+              #    data = p.grad.data
+              #    p.grad = Variable(data.new().resize_as_(data).zero_())
+
+  def _hessian(self, outputs, inputs, out=None, allow_unused=False,
+               create_graph=False):
+      #assert outputs.data.ndimension() == 1
+      if torch.is_tensor(inputs):
+          inputs = [inputs]
+      else:
+          inputs = list(inputs)
+      n = sum(p.numel() for p in inputs)
+      if out is None:
+          out = Variable(torch.zeros(n, n)).type_as(outputs)
+      ai = 0
+      for i, inp in enumerate(inputs):
+          [grad] = torch.autograd.grad(outputs, inp, create_graph=True,
+                                       allow_unused=allow_unused)
+          grad = grad.contiguous().view(-1) + self.weight_decay*inp.view(-1)
+          #grad = outputs[i].contiguous().view(-1)
+          for j in range(inp.numel()):
+              # print('(i, j): ', i, j)
+              if grad[j].requires_grad:
+                  row = self.gradient(grad[j], inputs[i:], retain_graph=True)[j:]
+              else:
+                  n = sum(x.numel() for x in inputs[i:]) - j
+                  row = Variable(torch.zeros(n)).type_as(grad[j])
+                  #row = grad[j].new_zeros(sum(x.numel() for x in inputs[i:]) - j)
+              out.data[ai, ai:].add_(row.clone().type_as(out).data)  # ai's row
+              if ai + 1 < n:
+                  out.data[ai + 1:, ai].add_(row.clone().type_as(out).data[1:])  # ai's column
+              del row
+              ai += 1
+          del grad
+      return out
